@@ -79,6 +79,7 @@ jobs:
                     NSAllowsArbitraryLoads: true
               settings:
                 base:
+                  PRODUCT_NAME: YTGrab
                   PRODUCT_BUNDLE_IDENTIFIER: com.ytgrab.app
                   SWIFT_VERSION: "5.9"
                   TARGETED_DEVICE_FAMILY: "1,2"
