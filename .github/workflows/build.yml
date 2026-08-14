@@ -1,22 +1,18 @@
 # ============================================================================
-#  BUILD.yml  —  ملف واحد يبني تطبيق "YT Grab" بالكامل لوحده
+#  BUILD.yml  —  ملف واحد يبني تطبيق "YT Grab" بالكامل لوحده (نسخة خارقة)
 #  ----------------------------------------------------------------------------
-#  هذا الملف "مكتفٍ ذاتياً" (Self-Contained):
-#  لما تشغّله على GitHub Actions، هو نفسه يكتب كل ملفات المشروع (Swift + أيقونة
-#  + إعدادات المشروع)، ثم يثبّت XcodeGen، يولّد مشروع Xcode، يبنيه بدون توقيع،
-#  ويحزمه كملف .ipa و .tipa جاهز للتثبيت عبر TrollStore.
+#  مكتفٍ ذاتياً: يكتب كل ملفات المشروع، يولّد الأيقونة، يثبّت XcodeGen،
+#  يبني بدون توقيع، ويحزم .ipa + .tipa جاهزة لـ TrollStore.
 #
-#  ✔ لا تحتاج رفع أي ملف آخر. ارفع هذا الملف فقط على المسار:
-#      .github/workflows/BUILD.yml
-#
-#  متوافق مع: iPhone 11 Pro Max / iOS 16.4 (TrollStore)
+#  ✔ ارفع هذا الملف فقط على المسار: .github/workflows/BUILD.yml
+#  ✔ متوافق مع: iPhone 11 Pro Max / iOS 16.4 (TrollStore)
 # ============================================================================
 name: Build YTGrab for TrollStore (one file)
 
 on:
-  workflow_dispatch:                    # تشغيل يدوي من تبويب Actions
+  workflow_dispatch:
   push:
-    branches: [ "main", "master" ]      # تشغيل تلقائي عند أي تعديل
+    branches: [ "main", "master" ]
 
 permissions:
   contents: read
@@ -27,9 +23,7 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      # ----------------------------------------------------------------------
-      # 1) هذا هو أهم جزء: توليد كل ملفات المشروع تلقائياً
-      # ----------------------------------------------------------------------
+      # 1) توليد كل ملفات المشروع
       - name: Generate all project files
         shell: bash
         run: |
@@ -41,8 +35,48 @@ jobs:
             cat > "$1"
           }
 
+          # ---------------- App icon (مولّدة برمجياً) ----------------
+          python3 - <<'PYEOF'
+          import zlib, struct, os
+          os.makedirs("Sources/Assets.xcassets/AppIcon.appiconset", exist_ok=True)
+          W = H = 1024
+          def clamp(v): return max(0, min(255, int(v)))
+          def in_tri(px, py, ax, ay, bx, by, cx, cy):
+              d1 = (px-bx)*(ay-by) - (ax-bx)*(py-by)
+              d2 = (px-cx)*(by-cy) - (bx-cx)*(py-cy)
+              d3 = (px-ax)*(cy-ay) - (cx-ax)*(py-ay)
+              neg = (d1 < 0) or (d2 < 0) or (d3 < 0)
+              pos = (d1 > 0) or (d2 > 0) or (d3 > 0)
+              return not (neg and pos)
+          rows = []
+          for y in range(H):
+              row = bytearray(b'\x00')
+              for x in range(W):
+                  t = (x + y) / (2 * W)
+                  r, g, b = clamp(20 + 44*t), clamp(14 + 14*t), clamp(42 + 72*t)
+                  col = (r, g, b)
+                  if in_tri(x, y, 400, 320, 400, 704, 690, 512):
+                      tt = (x - 400) / 290.0
+                      col = (clamp(255 - 105*tt), clamp(80 + 10*tt), clamp(170 + 85*tt))
+                      if 482 <= x <= 542 and 430 <= y <= 555:
+                          col = (255, 255, 255)
+                      if in_tri(x, y, 438, 555, 586, 555, 512, 618):
+                          col = (255, 255, 255)
+                  row += bytes(col)
+              rows.append(bytes(row))
+          raw = b''.join(rows)
+          def chunk(typ, data):
+              return struct.pack('>I', len(data)) + typ + data + struct.pack('>I', zlib.crc32(typ + data) & 0xffffffff)
+          png = b'\x89PNG\r\n\x1a\n'
+          png += chunk(b'IHDR', struct.pack('>IIBBBBB', W, H, 8, 2, 0, 0, 0))
+          png += chunk(b'IDAT', zlib.compress(raw, 9))
+          png += chunk(b'IEND', b'')
+          open("Sources/Assets.xcassets/AppIcon.appiconset/AppIcon.png", "wb").write(png)
+          print("App icon generated OK:", len(png), "bytes")
+          PYEOF
+
           # ---------------- project.yml ----------------
-          gen project.yml <<'YMLEOF'
+          gen project.yml <<'__YTG_0000__'
           name: YTGrab
           options:
             bundleIdPrefix: com.ytgrab
@@ -96,128 +130,10 @@ jobs:
                 config: Debug
               archive:
                 config: Release
-          YMLEOF
+          __YTG_0000__
 
-          # ---------------- Asset catalog ----------------
-          gen Sources/Assets.xcassets/Contents.json <<'JSONEOF'
-          {
-            "info" : {
-              "author" : "xcode",
-              "version" : 1
-            }
-          }
-          JSONEOF
-
-          gen Sources/Assets.xcassets/AppIcon.appiconset/Contents.json <<'JSONEOF'
-          {
-            "images" : [
-              {
-                "filename" : "AppIcon.png",
-                "idiom" : "universal",
-                "platform" : "ios",
-                "size" : "1024x1024"
-              }
-            ],
-            "info" : {
-              "author" : "xcode",
-              "version" : 1
-            }
-          }
-          JSONEOF
-
-          # ---------------- Info.plist (ضمان وجود ملف إعدادات التطبيق) ----------------
-          gen Sources/Info.plist <<'PLISTEOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleDevelopmentRegion</key>
-            <string>$(DEVELOPMENT_LANGUAGE)</string>
-            <key>CFBundleDisplayName</key>
-            <string>YT Grab</string>
-            <key>CFBundleExecutable</key>
-            <string>$(EXECUTABLE_NAME)</string>
-            <key>CFBundleIdentifier</key>
-            <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-            <key>CFBundleInfoDictionaryVersion</key>
-            <string>6.0</string>
-            <key>CFBundleName</key>
-            <string>$(PRODUCT_NAME)</string>
-            <key>CFBundlePackageType</key>
-            <string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
-            <key>CFBundleShortVersionString</key>
-            <string>1.0.0</string>
-            <key>CFBundleVersion</key>
-            <string>1</string>
-            <key>LSApplicationCategoryType</key>
-            <string>public.app-category.video</string>
-            <key>LSSupportsOpeningDocumentsInPlace</key>
-            <true/>
-            <key>NSAppTransportSecurity</key>
-            <dict>
-              <key>NSAllowsArbitraryLoads</key>
-              <true/>
-            </dict>
-            <key>UIBackgroundModes</key>
-            <array>
-              <string>audio</string>
-            </array>
-            <key>UIFileSharingEnabled</key>
-            <true/>
-            <key>UILaunchScreen</key>
-            <dict/>
-            <key>UISupportedInterfaceOrientations</key>
-            <array>
-              <string>UIInterfaceOrientationPortrait</string>
-              <string>UIInterfaceOrientationLandscapeLeft</string>
-              <string>UIInterfaceOrientationLandscapeRight</string>
-            </array>
-          </dict>
-          </plist>
-          PLISTEOF
-
-          # ---------------- App icon (مولّدة برمجياً بدون أي اعتماديات) ----------------
-          python3 - <<'PYEOF'
-          import zlib, struct, os
-          os.makedirs("Sources/Assets.xcassets/AppIcon.appiconset", exist_ok=True)
-          W = H = 1024
-          def clamp(v): return max(0, min(255, int(v)))
-          def in_tri(px, py, ax, ay, bx, by, cx, cy):
-              d1 = (px-bx)*(ay-by) - (ax-bx)*(py-by)
-              d2 = (px-cx)*(by-cy) - (bx-cx)*(py-cy)
-              d3 = (px-ax)*(cy-ay) - (cx-ax)*(py-ay)
-              neg = (d1 < 0) or (d2 < 0) or (d3 < 0)
-              pos = (d1 > 0) or (d2 > 0) or (d3 > 0)
-              return not (neg and pos)
-          rows = []
-          for y in range(H):
-              row = bytearray(b'\x00')
-              for x in range(W):
-                  t = (x + y) / (2 * W)
-                  r, g, b = clamp(20 + 44*t), clamp(14 + 14*t), clamp(42 + 72*t)
-                  col = (r, g, b)
-                  if in_tri(x, y, 400, 320, 400, 704, 690, 512):
-                      tt = (x - 400) / 290.0
-                      col = (clamp(255 - 105*tt), clamp(80 + 10*tt), clamp(170 + 85*tt))
-                      if 482 <= x <= 542 and 430 <= y <= 555:
-                          col = (255, 255, 255)
-                      if in_tri(x, y, 438, 555, 586, 555, 512, 618):
-                          col = (255, 255, 255)
-                  row += bytes(col)
-              rows.append(bytes(row))
-          raw = b''.join(rows)
-          def chunk(typ, data):
-              return struct.pack('>I', len(data)) + typ + data + struct.pack('>I', zlib.crc32(typ + data) & 0xffffffff)
-          png = b'\x89PNG\r\n\x1a\n'
-          png += chunk(b'IHDR', struct.pack('>IIBBBBB', W, H, 8, 2, 0, 0, 0))
-          png += chunk(b'IDAT', zlib.compress(raw, 9))
-          png += chunk(b'IEND', b'')
-          open("Sources/Assets.xcassets/AppIcon.appiconset/AppIcon.png", "wb").write(png)
-          print("App icon generated OK:", len(png), "bytes")
-          PYEOF
-
-          # ---------------- App entry ----------------
-          gen Sources/App/YTGrabApp.swift <<'SWIFTEOF'
+          # ---------------- Sources/App/YTGrabApp.swift ----------------
+          gen Sources/App/YTGrabApp.swift <<'__YTG_0001__'
           import SwiftUI
 
           @main
@@ -241,6 +157,8 @@ jobs:
                   TabView {
                       HomeView()
                           .tabItem { Label("تحميل", systemImage: "arrow.down.circle.fill") }
+                      BrowserView()
+                          .tabItem { Label("المتصفح", systemImage: "safari.fill") }
                       LibraryView()
                           .tabItem { Label("المكتبة", systemImage: "folder.fill") }
                       SettingsView()
@@ -248,57 +166,582 @@ jobs:
                   }
               }
           }
-          SWIFTEOF
+          __YTG_0001__
 
-          # ---------------- Models ----------------
-          gen Sources/Models/Models.swift <<'SWIFTEOF'
-          import Foundation
+          # ---------------- Sources/Assets.xcassets/Contents.json ----------------
+          gen Sources/Assets.xcassets/Contents.json <<'__YTG_0002__'
+          {
+            "info" : {
+              "author" : "xcode",
+              "version" : 1
+            }
+          }
+          __YTG_0002__
 
-          struct SavedVideo: Identifiable, Codable, Hashable {
-              var id = UUID()
-              var title: String
-              var sourceURL: String
-              var relativePath: String
-              var service: String
-              var quality: String
-              var format: String
-              var fileSize: Int64
-              var duration: Double?
-              var thumbnailName: String?
-              var downloadedAt: Date = Date()
-
-              var fileURL: URL? {
-                  let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-                  return docs?.appendingPathComponent(relativePath)
+          # ---------------- Sources/Assets.xcassets/AppIcon.appiconset/Contents.json ----------------
+          gen Sources/Assets.xcassets/AppIcon.appiconset/Contents.json <<'__YTG_0003__'
+          {
+            "images" : [
+              {
+                "filename" : "AppIcon.png",
+                "idiom" : "universal",
+                "platform" : "ios",
+                "size" : "1024x1024"
               }
+            ],
+            "info" : {
+              "author" : "xcode",
+              "version" : 1
+            }
           }
+          __YTG_0003__
 
-          struct InstanceConfig: Identifiable, Codable, Hashable {
-              var id = UUID()
-              var name: String
+          # ---------------- Sources/Browser/AdBlocker.swift ----------------
+          gen Sources/Browser/AdBlocker.swift <<'__YTG_0004__'
+          import Foundation
+          import WebKit
+
+          // ============================================================
+          //  مانع إعلانات قوي — حجب نطاقات + قواعد محتوى + حقن CSS/JS
+          // ============================================================
+
+          enum AdBlocker {
+
+              static let blockedDomains: [String] = [
+                  "doubleclick.net", "googlesyndication.com", "googleadservices.com",
+                  "adservice.google.com", "adnxs.com", "adsrvr.org", "taboola.com",
+                  "outbrain.com", "criteo.com", "criteo.net", "scorecardresearch.com",
+                  "quantserve.com", "amazon-adsystem.com", "moatads.com", "pubmatic.com",
+                  "rubiconproject.com", "openx.net", "adform.net", "smartadserver.com",
+                  "teads.tv", "springserve.com", "yieldmo.com", "mgid.com", "popads.net",
+                  "popcash.net", "propellerads.com", "adsterra.com", "admob.com",
+                  "applovin.com", "vungle.com", "chartboost.com", "mopub.com",
+                  "unityads.unity3d.com", "sascdn.com", "adcolony.com", "inmobi.com",
+                  "ironsrc.com", "appnext.com", "advertising.com", "2mdn.net"
+              ]
+
+              static func isBlocked(host: String?) -> Bool {
+                  guard let h = host?.lowercased() else { return false }
+                  for d in blockedDomains {
+                      if h == d || h.hasSuffix("." + d) { return true }
+                  }
+                  return false
+              }
+
+              static let rulesJSON: String = {
+                  var rules: [[String: Any]] = []
+                  for d in blockedDomains {
+                      rules.append([
+                          "trigger": ["url-filter": ".*", "if-domain": [d]],
+                          "action": ["type": "block"]
+                      ])
+                  }
+                  let selectors = [
+                      "[id*=\"advert\"]", "[class*=\"advert\"]", "[id*=\"google_ads\"]",
+                      "[class*=\"google_ads\"]", "ins.adsbygoogle", ".ytp-ad-module",
+                      ".ytp-ad-overlay-container", ".ytp-ad-player-overlay", ".ad-container",
+                      ".ad-slot", ".ad-banner", ".sponsored", "[class*=\"sponsored\"]",
+                      "#player-ads", ".video-ads", ".ad-showing", ".ad-interrupting"
+                  ]
+                  for sel in selectors {
+                      rules.append([
+                          "trigger": ["url-filter": ".*"],
+                          "action": ["type": "css-display-none", "selector": sel]
+                      ])
+                  }
+                  let data = try! JSONSerialization.data(withJSONObject: rules)
+                  return String(data: data, encoding: .utf8) ?? "[]"
+              }()
+
+              static func compile(completion: @escaping (WKContentRuleList?) -> Void) {
+                  WKContentRuleListStore.default().compileContentRuleList(
+                      forIdentifier: "ytgrab-adblock",
+                      encodedContentRuleList: rulesJSON
+                  ) { list, _ in
+                      DispatchQueue.main.async { completion(list) }
+                  }
+              }
+
+              static let adHideJS = """
+              (function(){
+                function hide(){
+                  try{
+                    var s='.ad,.ads,.advert,.advertisement,[id*="google_ads"],ins.adsbygoogle,.ytp-ad-module,.ytp-ad-player-overlay,[class*="sponsored"],.ad-container,.ad-slot,.ad-banner,#player-ads,.video-ads';
+                    var els=document.querySelectorAll(s);
+                    for(var i=0;i<els.length;i++){ els[i].style.display='none'; }
+                  }catch(e){}
+                }
+                function start(){
+                  hide();
+                  try{
+                    var mo=new MutationObserver(hide);
+                    if(document.body){ mo.observe(document.body,{subtree:true,childList:true}); }
+                  }catch(e){}
+                }
+                if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',start); } else { start(); }
+              })();
+              """
+
+              static let mediaSniffJS = """
+              (function(){
+                var last='';
+                function post(){
+                  try{
+                    var m='';
+                    var v=document.querySelector('video');
+                    if(v){ m=v.currentSrc||v.src||''; }
+                    if(!m){ var a=document.querySelector('audio'); if(a){ m=a.currentSrc||a.src||''; } }
+                    if(!m){ var s=document.querySelector('video source, audio source'); if(s){ m=s.src||''; } }
+                    if(m && m.indexOf('blob:')===0){ m=''; }
+                    var t=document.title||'';
+                    var og=document.querySelector('meta[property="og:title"]');
+                    if(og&&og.getAttribute('content')){ t=og.getAttribute('content'); }
+                    var img='';
+                    var ogi=document.querySelector('meta[property="og:image"]');
+                    if(ogi&&ogi.getAttribute('content')){ img=ogi.getAttribute('content'); }
+                    var key=m+'|'+t+'|'+img;
+                    if(key===last){ return; }
+                    last=key;
+                    window.webkit.messageHandlers.yt.postMessage({type:'media',url:m,title:t,img:img,page:location.href});
+                  }catch(e){}
+                }
+                function start(){
+                  post();
+                  try{
+                    document.addEventListener('play',function(e){ if(e.target&&(e.target.tagName==='VIDEO'||e.target.tagName==='AUDIO')){ post(); } },true);
+                    document.addEventListener('loadedmetadata',function(e){ if(e.target&&e.target.tagName==='VIDEO'){ post(); } },true);
+                    var mo=new MutationObserver(post);
+                    if(document.body){ mo.observe(document.body,{subtree:true,childList:true,attributes:true}); }
+                  }catch(e){}
+                }
+                if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',start); } else { start(); }
+              })();
+              """
+          }
+          __YTG_0004__
+
+          # ---------------- Sources/Browser/BrowserView.swift ----------------
+          gen Sources/Browser/BrowserView.swift <<'__YTG_0005__'
+          import SwiftUI
+          import WebKit
+          import UIKit
+
+          // ============================================================
+          //  المتصفح المدمج — WKWebView + كشف الوسائط + مانع إعلانات
+          // ============================================================
+
+          struct DetectedMedia {
               var url: String
-              var path: String
-              var apiKey: String
-              var bearerToken: String
-              var enabled: Bool = true
+              var title: String
+              var thumb: String
           }
 
-          enum DownloadKind: String, Codable, CaseIterable, Identifiable {
-              case auto, audio, mute
-              var id: String { rawValue }
-              var label: String {
-                  switch self {
-                  case .auto: return "فيديو + صوت"
-                  case .audio: return "صوت فقط"
-                  case .mute: return "فيديو صامت"
+          enum BrowserCommand: Equatable {
+              case go, back, forward, reload, home
+          }
+
+          struct BrowserView: View {
+              @EnvironmentObject var library: LibraryStore
+              @EnvironmentObject var settings: SettingsStore
+
+              var initialURL: String? = nil
+              var allowsDismiss: Bool = false
+
+              @State private var urlText = ""
+              @State private var pageTitle = ""
+              @State private var progress: Double = 0
+              @State private var canBack = false
+              @State private var canForward = false
+              @State private var detected: DetectedMedia?
+              @State private var navToken = 0
+              @State private var command: BrowserCommand?
+              @State private var showExtract = false
+              @State private var showError = false
+              @State private var errorMsg: String?
+
+              @Environment(\.dismiss) private var dismiss
+
+              init(initialURL: String? = nil, allowsDismiss: Bool = false) {
+                  self.initialURL = initialURL
+                  self.allowsDismiss = allowsDismiss
+              }
+
+              var body: some View {
+                  NavigationStack {
+                      VStack(spacing: 0) {
+                          toolbar
+                          ZStack(alignment: .bottom) {
+                              WebView(urlText: $urlText,
+                                      pageTitle: $pageTitle,
+                                      progress: $progress,
+                                      canBack: $canBack,
+                                      canForward: $canForward,
+                                      detected: $detected,
+                                      navToken: $navToken,
+                                      command: $command,
+                                      adBlock: settings.adBlockEnabled)
+                              if let d = detected, !d.url.isEmpty {
+                                  mediaBar(d)
+                              }
+                              if dm.isDownloading {
+                                  VStack(spacing: 6) {
+                                      ProgressView(value: dm.progress)
+                                          .progressViewStyle(.linear)
+                                          .tint(.green)
+                                      Text("جارٍ التحميل… \(Int(dm.progress * 100))%")
+                                          .font(.caption2)
+                                          .foregroundColor(.secondary)
+                                  }
+                                  .padding(12)
+                                  .background(.ultraThinMaterial)
+                                  .cornerRadius(12)
+                                  .padding(10)
+                              }
+                          }
+                      }
+                      .navigationTitle(pageTitle.isEmpty ? "المتصفح" : pageTitle)
+                      .navigationBarTitleDisplayMode(.inline)
+                      .toolbar {
+                          if allowsDismiss {
+                              ToolbarItem(placement: .cancellationAction) {
+                                  Button("إغلاق") { dismiss() }
+                              }
+                          }
+                      }
+                      .onAppear {
+                          if let u = initialURL, urlText.isEmpty {
+                              urlText = u
+                              navToken += 1
+                          }
+                      }
+                      .sheet(isPresented: $showExtract) {
+                          ExtractSheet(pageURL: urlText)
+                      }
+                      .fullScreenCover(item: $savedItem) { item in
+                          PlayerView(item: item)
+                      }
+                      .alert("خطأ", isPresented: $showError) {
+                          Button("حسناً", role: .cancel) {}
+                      } message: {
+                          Text(errorMsg ?? "")
+                      }
+                  }
+              }
+
+              private var toolbar: some View {
+                  VStack(spacing: 6) {
+                      HStack(spacing: 8) {
+                          TextField("عنوان أو بحث", text: $urlText)
+                              .textInputAutocapitalization(.never)
+                              .autocorrectionDisabled(true)
+                              .keyboardType(.URL)
+                              .padding(10)
+                              .background(Color.white.opacity(0.08))
+                              .cornerRadius(10)
+                          Button { command = .go } label: {
+                              Image(systemName: "arrow.right.circle.fill")
+                                  .font(.title3)
+                          }
+                      }
+                      HStack(spacing: 22) {
+                          Button { command = .back } label: {
+                              Image(systemName: "chevron.right").font(.title3)
+                          }.disabled(!canBack).opacity(canBack ? 1 : 0.4)
+                          Button { command = .forward } label: {
+                              Image(systemName: "chevron.left").font(.title3)
+                          }.disabled(!canForward).opacity(canForward ? 1 : 0.4)
+                          Button { command = .reload } label: {
+                              Image(systemName: "arrow.clockwise").font(.title3)
+                          }
+                          Button { command = .home } label: {
+                              Image(systemName: "house").font(.title3)
+                          }
+                          Spacer()
+                          Button {
+                              if urlText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                  errorMsg = "افتح صفحة تحتوي فيديو أولاً."
+                                  showError = true
+                              } else {
+                                  showExtract = true
+                              }
+                          } label: {
+                              Label("تحميل الصفحة", systemImage: "arrow.down.circle.fill")
+                                  .font(.footnote.weight(.semibold))
+                                  .padding(.horizontal, 12)
+                                  .padding(.vertical, 7)
+                                  .background(Color(red: 0.45, green: 0.28, blue: 0.95))
+                                  .foregroundColor(.white)
+                                  .cornerRadius(9)
+                          }
+                      }
+                      ProgressView(value: progress)
+                          .progressViewStyle(.linear)
+                          .opacity(progress > 0 && progress < 1 ? 1 : 0)
+                  }
+                  .padding(10)
+                  .background(Color.white.opacity(0.05))
+              }
+
+              private func mediaBar(_ d: DetectedMedia) -> some View {
+                  HStack(spacing: 10) {
+                      Image(systemName: "film.fill")
+                          .foregroundColor(.green)
+                      VStack(alignment: .leading, spacing: 2) {
+                          Text(d.title.isEmpty ? "تم اكتشاف وسائط" : d.title)
+                              .font(.footnote.weight(.semibold))
+                              .lineLimit(1)
+                          Text("اضغط للتحميل المباشر")
+                              .font(.caption2)
+                              .foregroundColor(.secondary)
+                      }
+                      Spacer()
+                      Button {
+                          guard let u = URL(string: d.url) else { return }
+                          let isHLS = d.url.lowercased().hasSuffix(".m3u8")
+                          let opt = StreamOption(label: isHLS ? "بث مباشر" : "ملف مباشر",
+                                                 kind: .auto,
+                                                 directURL: u,
+                                                 filename: u.lastPathComponent,
+                                                 isHLS: isHLS,
+                                                 container: "MP4",
+                                                 size: nil)
+                          showRenameFor(opt, title: d.title.isEmpty ? "media" : d.title, thumb: d.thumb)
+                      } label: {
+                          Label("تنزيل", systemImage: "arrow.down.circle.fill")
+                              .font(.footnote.weight(.bold))
+                              .padding(.horizontal, 14)
+                              .padding(.vertical, 8)
+                              .background(Color.green)
+                              .foregroundColor(.white)
+                              .cornerRadius(10)
+                      }
+                  }
+                  .padding(12)
+                  .background(.ultraThinMaterial)
+                  .cornerRadius(14)
+                  .padding(10)
+                  .alert("اسم الملف", isPresented: $showRename) {
+                      TextField("اسم الملف", text: $renameText)
+                      Button("تحميل") { confirmRenameDownload() }
+                      Button("إلغاء", role: .cancel) {}
+                  } message: {
+                      Text("غيّر اسم الفيديو قبل التحميل (اختياري).")
+                  }
+              }
+
+              // إعادة تسمية + تحميل (مباشر من المتصفح)
+              @State private var renameText = ""
+              @State private var showRename = false
+              @State private var pendingOption: StreamOption?
+              @State private var pendingTitle = ""
+              @State private var pendingThumb = ""
+              @State private var downloading = false
+              @State private var downloadProgress: Double = 0
+              @State private var savedItem: SavedVideo?
+              @StateObject private var dm = DownloadManager()
+
+              private func showRenameFor(_ opt: StreamOption, title: String, thumb: String) {
+                  pendingOption = opt
+                  pendingTitle = title
+                  pendingThumb = thumb
+                  renameText = title
+                  showRename = true
+              }
+
+              private func confirmRenameDownload() {
+                  guard let opt = pendingOption else { return }
+                  Task {
+                      downloading = true
+                      defer { downloading = false }
+                      do {
+                          let item = try await dm.download(option: opt,
+                                                           title: pendingTitle,
+                                                           service: MetadataFetcher.serviceName(for: urlText),
+                                                           thumbnailURL: pendingThumb.isEmpty ? nil : pendingThumb,
+                                                           pageURL: urlText,
+                                                           customName: renameText,
+                                                           library: library)
+                          savedItem = item
+                      } catch {
+                          errorMsg = error.localizedDescription
+                          showError = true
+                      }
                   }
               }
           }
-          SWIFTEOF
 
-          # ---------------- Engine: Cobalt client ----------------
-          gen Sources/Engine/CobaltClient.swift <<'SWIFTEOF'
+          // MARK: - WKWebView wrapper
+
+          struct WebView: UIViewRepresentable {
+              @Binding var urlText: String
+              @Binding var pageTitle: String
+              @Binding var progress: Double
+              @Binding var canBack: Bool
+              @Binding var canForward: Bool
+              @Binding var detected: DetectedMedia?
+              @Binding var navToken: Int
+              @Binding var command: BrowserCommand?
+              var adBlock: Bool
+
+              func makeCoordinator() -> Coordinator {
+                  Coordinator(self)
+              }
+
+              func makeUIView(context: Context) -> WKWebView {
+                  let config = WKWebViewConfiguration()
+                  let controller = WKUserContentController()
+                  controller.add(context.coordinator, name: "yt")
+                  controller.addUserScript(WKUserScript(source: AdBlocker.mediaSniffJS,
+                                                        injectionTime: .atDocumentEnd,
+                                                        forMainFrameOnly: false))
+                  if adBlock {
+                      controller.addUserScript(WKUserScript(source: AdBlocker.adHideJS,
+                                                            injectionTime: .atDocumentStart,
+                                                            forMainFrameOnly: false))
+                      AdBlocker.compile { list in
+                          if let list = list {
+                              controller.add(list)
+                          }
+                      }
+                  }
+                  config.userContentController = controller
+                  config.allowsInlineMediaPlayback = true
+                  config.mediaTypesRequiringUserActionForPlayback = []
+
+                  let webView = WKWebView(frame: .zero, configuration: config)
+                  webView.navigationDelegate = context.coordinator
+                  webView.uiDelegate = context.coordinator
+                  webView.allowsBackForwardNavigationGestures = true
+                  webView.backgroundColor = UIColor(red: 0.02, green: 0.02, blue: 0.05, alpha: 1)
+                  context.coordinator.observe(webView)
+                  return webView
+              }
+
+              func updateUIView(_ webView: WKWebView, context: Context) {
+                  context.coordinator.parent = self
+                  if let cmd = command {
+                      command = nil
+                      switch cmd {
+                      case .go: load(urlText, in: webView)
+                      case .back: webView.goBack()
+                      case .forward: webView.goForward()
+                      case .reload: webView.reload()
+                      case .home: webView.load(URLRequest(url: URL(string: "https://www.google.com")!))
+                      }
+                  }
+                  if context.coordinator.loadedToken != navToken {
+                      context.coordinator.loadedToken = navToken
+                      load(urlText, in: webView)
+                  }
+              }
+
+              private func load(_ text: String, in webView: WKWebView) {
+                  var t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                  guard !t.isEmpty else { return }
+                  if !t.contains("://") { t = "https://" + t }
+                  if let u = URL(string: t) {
+                      webView.load(URLRequest(url: u))
+                  }
+              }
+
+              static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
+                  coordinator.unobserve()
+                  webView.configuration.userContentController.removeScriptMessageHandler(forName: "yt")
+              }
+
+              final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+                  var parent: WebView
+                  var loadedToken: Int = -1
+                  private var progressObs: NSKeyValueObservation?
+                  private var backObs: NSKeyValueObservation?
+                  private var fwdObs: NSKeyValueObservation?
+
+                  init(_ parent: WebView) {
+                      self.parent = parent
+                  }
+
+                  func observe(_ webView: WKWebView) {
+                      progressObs = webView.observe(\.estimatedProgress, options: [.new]) { wv, _ in
+                          DispatchQueue.main.async { self.parent.progress = wv.estimatedProgress }
+                      }
+                      backObs = webView.observe(\.canGoBack, options: [.new]) { wv, _ in
+                          DispatchQueue.main.async { self.parent.canBack = wv.canGoBack }
+                      }
+                      fwdObs = webView.observe(\.canGoForward, options: [.new]) { wv, _ in
+                          DispatchQueue.main.async { self.parent.canForward = wv.canGoForward }
+                      }
+                  }
+
+                  func unobserve() {
+                      progressObs?.invalidate()
+                      backObs?.invalidate()
+                      fwdObs?.invalidate()
+                  }
+
+                  func userContentController(_ userContentController: WKUserContentController,
+                                             didReceive message: WKScriptMessage) {
+                      guard let dict = message.body as? [String: Any] else { return }
+                      let url = dict["url"] as? String ?? ""
+                      let title = dict["title"] as? String ?? ""
+                      let thumb = dict["img"] as? String ?? ""
+                      DispatchQueue.main.async {
+                          self.parent.detected = DetectedMedia(url: url, title: title, thumb: thumb)
+                      }
+                  }
+
+                  func webView(_ webView: WKWebView,
+                               decidePolicyFor navigationAction: WKNavigationAction,
+                               decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+                      guard let url = navigationAction.request.url else {
+                          decisionHandler(.allow)
+                          return
+                      }
+                      if url.scheme == "about" {
+                          decisionHandler(.allow)
+                          return
+                      }
+                      if navigationAction.targetFrame == nil {
+                          decisionHandler(.cancel)
+                          webView.load(navigationAction.request)
+                          return
+                      }
+                      if AdBlocker.isBlocked(host: url.host) {
+                          decisionHandler(.cancel)
+                          return
+                      }
+                      decisionHandler(.allow)
+                  }
+
+                  func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+                      DispatchQueue.main.async {
+                          self.parent.urlText = webView.url?.absoluteString ?? self.parent.urlText
+                          self.parent.pageTitle = webView.title ?? ""
+                          self.parent.canBack = webView.canGoBack
+                          self.parent.canForward = webView.canGoForward
+                      }
+                  }
+
+                  func webView(_ webView: WKWebView,
+                               createWebViewWith configuration: WKWebViewConfiguration,
+                               for navigationAction: WKNavigationAction,
+                               windowFeatures: WKWindowFeatures) -> WKWebView? {
+                      if navigationAction.targetFrame == nil {
+                          webView.load(navigationAction.request)
+                      }
+                      return nil
+                  }
+              }
+          }
+          __YTG_0005__
+
+          # ---------------- Sources/Engine/CobaltClient.swift ----------------
+          gen Sources/Engine/CobaltClient.swift <<'__YTG_0006__'
           import Foundation
+
+          // ============================================================
+          //  محرك الاستخراج — نفس فئة محرّكات yt-dlp عبر مثيلات cobalt
+          //  يجرّب كل المثيلات المفعّلة بالترتيب حتى ينجح واحد
+          // ============================================================
 
           struct CobaltPickerItem: Codable, Hashable {
               var type: String?
@@ -323,7 +766,7 @@ jobs:
               var audioFilename: String?
               var picker: [CobaltPickerItem]?
               var error: CobaltErrorBody?
-              var text: String?
+              var text: String?   // رسائل الخطأ في الإصدارات القديمة (v7)
           }
 
           enum ExtractOutcome {
@@ -349,7 +792,7 @@ jobs:
                   case .unsupportedService(let s):
                       return s.isEmpty ? "هذا الموقع غير مدعوم حالياً." : "الموقع «\(s)» غير مدعوم حالياً."
                   case .needsAuth(let name):
-                      return "المثيل «\(name)» يطلب مفتاح API. أضف مفتاحك من الإعدادات، أو شغّل مثيلك الخاص."
+                      return "المثيل «\(name)» يطلب مفتاح API. أضف مفتاحك من الإعدادات، أو شغّل مثيلك الخاص (انظر الإعدادات)."
                   case .rateLimited(let name):
                       return "تم تجاوز حد الطلبات في «\(name)». انتظر قليلاً أو جرّب مثيلاً آخر."
                   case .server(let code):
@@ -364,6 +807,7 @@ jobs:
 
               static let qualityOptions = ["max", "2160", "1440", "1080", "720", "480", "360", "240", "144"]
 
+              /// يرسل الطلب لكل المثيلات المفعّلة حتى ينجح واحد
               static func extract(source: String,
                                   instances: [InstanceConfig],
                                   kind: DownloadKind,
@@ -397,7 +841,7 @@ jobs:
                               if let raw = resp.url, let u = URL(string: raw) {
                                   return .downloadable(url: u, filename: resp.filename)
                               }
-                              if 1 > bestRank { best = .server("لم يُرجع الخادم رابط تحميل"); bestRank = 1 }
+                              if rank(.server("")) > bestRank { best = .server("لم يُرجع الخادم رابط تحميل"); bestRank = 1 }
                           case "picker":
                               if let items = resp.picker, !items.isEmpty {
                                   return .picker(items)
@@ -410,7 +854,9 @@ jobs:
                               let e = mapError(code: code, text: text, service: service, instance: instance)
                               if rank(e) > bestRank { best = e; bestRank = rank(e) }
                           default:
-                              if 1 > bestRank { best = .server("استجابة غير مفهومة"); bestRank = 1 }
+                              if rank(.server("استجابة غير مفهومة")) > bestRank {
+                                  best = .server("استجابة غير مفهومة"); bestRank = 1
+                              }
                           }
                       } catch {
                           let e = (error as? EngineError) ?? .server(error.localizedDescription)
@@ -469,12 +915,556 @@ jobs:
                   throw EngineError.server("استجابة غير متوقعة من «\(instance.name)»")
               }
           }
-          SWIFTEOF
+          __YTG_0006__
 
-          # ---------------- Engine: metadata ----------------
-          gen Sources/Engine/MetadataFetcher.swift <<'SWIFTEOF'
+          # ---------------- Sources/Engine/DownloadManager.swift ----------------
+          gen Sources/Engine/DownloadManager.swift <<'__YTG_0007__'
+          import Foundation
+          import AVFoundation
+          import Combine
+
+          // ============================================================
+          //  مدير التحميل المشترك — يدعم إعادة التسمية + تحويل HLS
+          // ============================================================
+
+          final class DownloadManager: ObservableObject {
+              @Published var progress: Double = 0
+              @Published var isDownloading = false
+
+              private let fileDownloader = FileDownloader()
+
+              @discardableResult
+              func download(option: StreamOption,
+                            title: String,
+                            service: String,
+                            thumbnailURL: String?,
+                            pageURL: String,
+                            customName: String?,
+                            library: LibraryStore) async throws -> SavedVideo {
+                  isDownloading = true
+                  progress = 0
+                  defer { isDownloading = false }
+
+                  let ext = extensionFor(option: option)
+                  let fileName = finalFileName(customName: customName, fallback: option.filename ?? title, ext: ext)
+                  let dest = library.makeDestinationURL(filename: fileName)
+
+                  let savedURL: URL
+                  if option.isHLS {
+                      savedURL = try await HLSExporter.export(m3u8: option.directURL, to: dest)
+                  } else {
+                      savedURL = try await fileDownloader.download(url: option.directURL, to: dest) { p in
+                          self.progress = p
+                      }
+                  }
+
+                  let attrs = try? FileManager.default.attributesOfItem(atPath: savedURL.path)
+                  let size = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
+
+                  var duration: Double? = nil
+                  if option.kind != .audio {
+                      let asset = AVURLAsset(url: savedURL)
+                      duration = try? await asset.load(.duration).seconds
+                  }
+
+                  let id = UUID()
+                  var thumbName: String? = nil
+                  if let t = thumbnailURL {
+                      thumbName = await library.saveThumbnail(remoteURL: t, for: id)
+                  }
+
+                  let item = SavedVideo(id: id,
+                                        title: title.isEmpty ? savedURL.lastPathComponent : title,
+                                        sourceURL: pageURL,
+                                        relativePath: "Downloads/" + savedURL.lastPathComponent,
+                                        service: service.isEmpty ? "موقع" : service,
+                                        quality: option.label,
+                                        format: (ext.isEmpty ? "MP4" : ext).uppercased(),
+                                        fileSize: size,
+                                        duration: duration,
+                                        thumbnailName: thumbName,
+                                        downloadedAt: Date())
+                  library.add(item)
+                  return item
+              }
+
+              private func extensionFor(option: StreamOption) -> String {
+                  if option.isHLS { return "mp4" }
+                  if let f = option.filename, !f.isEmpty {
+                      let e = (f as NSString).pathExtension
+                      if !e.isEmpty { return e }
+                  }
+                  let c = option.container.lowercased()
+                  switch c {
+                  case "webm": return "webm"
+                  case "m4a": return "m4a"
+                  case "mp3": return "mp3"
+                  case "opus": return "opus"
+                  case "ogg": return "ogg"
+                  case "wav": return "wav"
+                  case "aac": return "aac"
+                  default: return "mp4"
+                  }
+              }
+
+              private func finalFileName(customName: String?, fallback: String, ext: String) -> String {
+                  var name = customName ?? fallback
+                  name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                  if name.isEmpty { name = "video_" + String(Int(Date().timeIntervalSince1970)) }
+                  let safe = LibraryStore.sanitize(name)
+                  let known = ["mp4", "m4v", "mov", "webm", "m4a", "mp3", "aac", "opus", "ogg", "wav", "m3u8"]
+                  let lower = safe.lowercased()
+                  let hasKnownExt = known.contains { lower.hasSuffix("." + $0) }
+                  if hasKnownExt { return safe }
+                  return safe + "." + ext
+              }
+          }
+          __YTG_0007__
+
+          # ---------------- Sources/Engine/Extractor.swift ----------------
+          gen Sources/Engine/Extractor.swift <<'__YTG_0008__'
           import Foundation
 
+          // ============================================================
+          //  المنسّق العام — يجرب كل المحركات بدون مفاتيح بالترتيب
+          // ============================================================
+
+          enum YouTubeID {
+              static func extract(from urlString: String) -> String? {
+                  guard let url = URL(string: urlString) else { return nil }
+                  if let host = url.host, host.contains("youtu.be") {
+                      return url.pathComponents.filter { !$0.isEmpty && $0 != "/" }.last
+                  }
+                  if let comps = URLComponents(string: urlString),
+                     let v = comps.queryItems?.first(where: { $0.name == "v" })?.value {
+                      return v
+                  }
+                  let path = url.path
+                  for prefix in ["/shorts/", "/embed/", "/live/", "/v/"] {
+                      if path.hasPrefix(prefix) {
+                          let rest = String(path.dropFirst(prefix.count))
+                          return rest.isEmpty ? nil : rest
+                      }
+                  }
+                  return nil
+              }
+          }
+
+          enum DirectMedia {
+              static func detect(_ url: URL) -> StreamOption? {
+                  let p = url.path.lowercased()
+                  let fn = url.lastPathComponent
+                  if p.hasSuffix(".mp4") || p.hasSuffix(".m4v") || p.hasSuffix(".mov") {
+                      return StreamOption(label: "ملف فيديو مباشر", kind: .auto, directURL: url,
+                                          filename: fn, isHLS: false, container: "MP4", size: nil)
+                  }
+                  if p.hasSuffix(".webm") {
+                      return StreamOption(label: "ملف WebM مباشر", kind: .auto, directURL: url,
+                                          filename: fn, isHLS: false, container: "WEBM", size: nil)
+                  }
+                  if p.hasSuffix(".m3u8") {
+                      return StreamOption(label: "بث HLS مباشر", kind: .auto, directURL: url,
+                                          filename: fn, isHLS: true, container: "MP4", size: nil)
+                  }
+                  if p.hasSuffix(".mp3") || p.hasSuffix(".m4a") || p.hasSuffix(".aac") ||
+                     p.hasSuffix(".opus") || p.hasSuffix(".ogg") || p.hasSuffix(".wav") {
+                      return StreamOption(label: "ملف صوت مباشر", kind: .audio, directURL: url,
+                                          filename: fn, isHLS: false, container: "MP3", size: nil)
+                  }
+                  return nil
+              }
+          }
+
+          enum Extractor {
+
+              static func resolve(pageURL: String, settings: SettingsStore) async throws -> ResolvedMedia {
+                  let trimmed = pageURL.trimmingCharacters(in: .whitespacesAndNewlines)
+                  guard let url = URL(string: trimmed) else { throw EngineError.invalidURL }
+
+                  // 1) رابط وسائط مباشر؟
+                  if let direct = DirectMedia.detect(url) {
+                      return ResolvedMedia(title: url.lastPathComponent, service: "رابط مباشر",
+                                           thumbnailURL: nil, pageURL: trimmed, options: [direct])
+                  }
+
+                  let service = MetadataFetcher.serviceName(for: trimmed)
+                  var lastError: EngineError = .server("غير معروف")
+
+                  // 2) يوتيوب: Invidious ثم Piped (بدون مفاتيح)
+                  if service == "YouTube", let id = YouTubeID.extract(from: trimmed) {
+                      if settings.useInvidious {
+                          do {
+                              let pool = await InstancePool.invidious(settings: settings)
+                              let r = try await InvidiousEngine.resolve(id: id, instances: pool)
+                              if !r.options.isEmpty { return r }
+                          } catch {
+                              lastError = (error as? EngineError) ?? .server(error.localizedDescription)
+                          }
+                      }
+                      if settings.usePiped {
+                          do {
+                              let pool = await InstancePool.piped(settings: settings)
+                              let r = try await PipedEngine.resolve(id: id, instances: pool)
+                              if !r.options.isEmpty { return r }
+                          } catch {
+                              lastError = (error as? EngineError) ?? .server(error.localizedDescription)
+                          }
+                      }
+                  }
+
+                  // 3) Cobalt (يغطي كل المواقع الأخرى)
+                  if settings.useCobalt {
+                      do {
+                          let out = try await CobaltClient.extract(source: trimmed,
+                                                                   instances: settings.instances,
+                                                                   kind: settings.defaultKind,
+                                                                   quality: settings.defaultQuality,
+                                                                   audioFormat: settings.defaultAudioFormat)
+                          switch out {
+                          case .downloadable(let u, let f):
+                              let meta = await MetadataFetcher.fetch(for: trimmed)
+                              return ResolvedMedia(title: meta.title ?? f ?? "فيديو",
+                                                   service: service,
+                                                   thumbnailURL: meta.thumbnailURL,
+                                                   pageURL: trimmed,
+                                                   options: [StreamOption(label: "أفضل جودة متاحة",
+                                                                          kind: settings.defaultKind,
+                                                                          directURL: u, filename: f,
+                                                                          isHLS: false, container: "MP4", size: nil)])
+                          case .picker(let items):
+                              let opts = items.compactMap { it -> StreamOption? in
+                                  guard let s = it.url, let u = URL(string: s) else { return nil }
+                                  return StreamOption(label: it.type == "photo" ? "صورة" : "فيديو",
+                                                      kind: .auto, directURL: u, filename: nil,
+                                                      isHLS: false, container: "MP4", size: nil)
+                              }
+                              if !opts.isEmpty {
+                                  let meta = await MetadataFetcher.fetch(for: trimmed)
+                                  return ResolvedMedia(title: meta.title ?? "فيديو",
+                                                       service: service,
+                                                       thumbnailURL: meta.thumbnailURL,
+                                                       pageURL: trimmed, options: opts)
+                              }
+                          }
+                      } catch {
+                          lastError = (error as? EngineError) ?? .server(error.localizedDescription)
+                      }
+                  }
+
+                  throw lastError
+              }
+          }
+          __YTG_0008__
+
+          # ---------------- Sources/Engine/FileDownloader.swift ----------------
+          gen Sources/Engine/FileDownloader.swift <<'__YTG_0009__'
+          import Foundation
+
+          /// تحميل الملفات مع شريط تقدّم حقيقي
+          final class FileDownloader: NSObject, URLSessionDownloadDelegate {
+
+              private var onProgress: ((Double) -> Void)?
+              private var continuation: CheckedContinuation<URL, Error>?
+              private var targetURL: URL?
+              private var finished = false
+
+              private lazy var session: URLSession = URLSession(configuration: .default,
+                                                                 delegate: self,
+                                                                 delegateQueue: .main)
+
+              func download(url: URL,
+                            to destination: URL,
+                            progress: @escaping (Double) -> Void) async throws -> URL {
+                  finished = false
+                  onProgress = progress
+                  targetURL = destination
+
+                  return try await withCheckedThrowingContinuation { cont in
+                      self.continuation = cont
+                      var req = URLRequest(url: url)
+                      req.timeoutInterval = 900
+                      req.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 16_4 like Mac OS X) AppleWebKit/605.1.15",
+                                   forHTTPHeaderField: "User-Agent")
+                      let task = session.downloadTask(with: req)
+                      task.resume()
+                  }
+              }
+
+              func urlSession(_ session: URLSession,
+                              downloadTask: URLSessionDownloadTask,
+                              didWriteData bytesWritten: Int64,
+                              totalBytesWritten: Int64,
+                              totalBytesExpectedToWrite: Int64) {
+                  guard totalBytesExpectedToWrite > 0 else { return }
+                  onProgress?(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite))
+              }
+
+              func urlSession(_ session: URLSession,
+                              downloadTask: URLSessionDownloadTask,
+                              didFinishDownloadingTo location: URL) {
+                  guard !finished else { return }
+                  do {
+                      guard let target = targetURL else { throw EngineError.server("لا يوجد مسار حفظ") }
+                      try? FileManager.default.removeItem(at: target)
+                      try FileManager.default.createDirectory(at: target.deletingLastPathComponent(),
+                                                             withIntermediateDirectories: true)
+                      try FileManager.default.moveItem(at: location, to: target)
+                      finished = true
+                      continuation?.resume(returning: target)
+                      continuation = nil
+                  } catch {
+                      finished = true
+                      continuation?.resume(throwing: error)
+                      continuation = nil
+                  }
+              }
+
+              func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+                  guard let error = error, !finished else { return }
+                  finished = true
+                  continuation?.resume(throwing: error)
+                  continuation = nil
+              }
+          }
+          __YTG_0009__
+
+          # ---------------- Sources/Engine/HLSExporter.swift ----------------
+          gen Sources/Engine/HLSExporter.swift <<'__YTG_0010__'
+          import Foundation
+          import AVFoundation
+
+          // تحويل بث HLS إلى ملف MP4 محلي عبر AVFoundation (بدون أي مكتبات خارجية)
+          enum HLSExporter {
+              static func export(m3u8: URL, to destination: URL) async throws -> URL {
+                  try? FileManager.default.removeItem(at: destination)
+                  try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(),
+                                                          withIntermediateDirectories: true)
+                  let asset = AVURLAsset(url: m3u8)
+                  guard let session = AVAssetExportSession(asset: asset,
+                                                           presetName: AVAssetExportPresetHighestQuality) else {
+                      throw EngineError.server("تعذر إنشاء جلسة التصدير")
+                  }
+                  session.outputURL = destination
+                  session.outputFileType = .mp4
+                  session.shouldOptimizeForNetworkUse = true
+
+                  try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                      session.exportAsynchronously {
+                          switch session.status {
+                          case .completed:
+                              cont.resume()
+                          case .cancelled:
+                              cont.resume(throwing: EngineError.server("تم إلغاء التصدير"))
+                          case .failed:
+                              cont.resume(throwing: session.error ?? EngineError.server("فشل تحويل البث"))
+                          default:
+                              cont.resume(throwing: EngineError.server("فشل تحويل البث"))
+                          }
+                      }
+                  }
+                  return destination
+              }
+          }
+          __YTG_0010__
+
+          # ---------------- Sources/Engine/InstancePool.swift ----------------
+          gen Sources/Engine/InstancePool.swift <<'__YTG_0011__'
+          import Foundation
+
+          // ============================================================
+          //  تجميع المثيلات — قوائم مدمجة + تحديث مباشر من الإنترنت
+          // ============================================================
+
+          enum InstancePool {
+
+              static let builtInInvidious: [String] = [
+                  "https://invidious.f5.si",
+                  "https://inv.nadeko.net",
+                  "https://yewtu.be",
+                  "https://invidious.nerdvpn.de",
+                  "https://inv.tux.pizza",
+                  "https://invidious.privacyredirect.com"
+              ]
+
+              static let builtInPiped: [String] = [
+                  "https://api.piped.private.coffee",
+                  "https://pipedapi.kavin.rocks",
+                  "https://pipedapi.adminforge.de",
+                  "https://pipedapi.reallyaweso.me",
+                  "https://piped-api.garudalinux.org",
+                  "https://api.piped.ducks.party"
+              ]
+
+              static func invidious(settings: SettingsStore) async -> [String] {
+                  var list = settings.invidiousInstances
+                  if list.isEmpty { list = builtInInvidious }
+                  if let live = await fetchInvidiousLive(), !live.isEmpty {
+                      var merged = live
+                      for item in list where !merged.contains(item) { merged.append(item) }
+                      return merged
+                  }
+                  return list
+              }
+
+              static func piped(settings: SettingsStore) async -> [String] {
+                  var list = settings.pipedInstances
+                  if list.isEmpty { list = builtInPiped }
+                  if let live = await fetchPipedLive(), !live.isEmpty {
+                      var merged = live
+                      for item in list where !merged.contains(item) { merged.append(item) }
+                      return merged
+                  }
+                  return list
+              }
+
+              static func fetchInvidiousLive() async -> [String]? {
+                  guard let url = URL(string: "https://api.invidious.io/instances.json?sort_by=health") else { return nil }
+                  var req = URLRequest(url: url)
+                  req.timeoutInterval = 15
+                  guard let (data, _) = try? await URLSession.shared.data(for: req),
+                        let arr = try? JSONSerialization.jsonObject(with: data) as? [[Any]] else { return nil }
+                  var out: [String] = []
+                  for item in arr {
+                      guard item.count >= 2, let dict = item[1] as? [String: Any] else { continue }
+                      if let type = dict["type"] as? String, type != "https" { continue }
+                      if let uri = dict["uri"] as? String, uri.hasPrefix("https://") {
+                          out.append(uri)
+                          if out.count >= 8 { break }
+                      }
+                  }
+                  return out.isEmpty ? nil : out
+              }
+
+              static func fetchPipedLive() async -> [String]? {
+                  guard let url = URL(string: "https://piped-instances.kavin.rocks/") else { return nil }
+                  var req = URLRequest(url: url)
+                  req.timeoutInterval = 15
+                  guard let (data, _) = try? await URLSession.shared.data(for: req),
+                        let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return nil }
+                  var out: [String] = []
+                  for item in arr {
+                      if let api = item["api_url"] as? String, api.hasPrefix("https://") {
+                          out.append(api)
+                          if out.count >= 8 { break }
+                      }
+                  }
+                  return out.isEmpty ? nil : out
+              }
+          }
+          __YTG_0011__
+
+          # ---------------- Sources/Engine/InvidiousEngine.swift ----------------
+          gen Sources/Engine/InvidiousEngine.swift <<'__YTG_0012__'
+          import Foundation
+
+          // ============================================================
+          //  محرك Invidious — واجهة يوتيوب حرة بدون أي مفاتيح API
+          // ============================================================
+
+          struct InvidiousFormat: Codable {
+              var itag: String?
+              var url: String?
+              var type: String?
+              var qualityLabel: String?
+              var resolution: String?
+              var container: String?
+              var bitrate: String?
+              var size: String?
+              var clen: String?
+          }
+
+          struct InvidiousThumb: Codable {
+              var url: String?
+          }
+
+          struct InvidiousVideo: Codable {
+              var title: String?
+              var lengthSeconds: Int?
+              var videoThumbnails: [InvidiousThumb]?
+              var formatStreams: [InvidiousFormat]?
+              var adaptiveFormats: [InvidiousFormat]?
+              var hls: String?
+          }
+
+          enum InvidiousEngine {
+
+              static func resolve(id: String, instances: [String]) async throws -> ResolvedMedia {
+                  var lastError: Error = EngineError.server("غير معروف")
+                  for raw in instances {
+                      var base = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                      while base.hasSuffix("/") { base.removeLast() }
+                      guard let endpoint = URL(string: base + "/api/v1/videos/" + id) else { continue }
+                      do {
+                          var req = URLRequest(url: endpoint)
+                          req.timeoutInterval = 30
+                          req.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 16_4 like Mac OS X) AppleWebKit/605.1.15",
+                                       forHTTPHeaderField: "User-Agent")
+                          let (data, resp) = try await URLSession.shared.data(for: req)
+                          if let http = resp as? HTTPURLResponse, http.statusCode == 403 || http.statusCode == 404 {
+                              continue
+                          }
+                          guard let video = try? JSONDecoder().decode(InvidiousVideo.self, from: data) else { continue }
+                          let options = buildOptions(from: video)
+                          if options.isEmpty { continue }
+                          let thumb = video.videoThumbnails?.compactMap { $0.url }.last
+                          let duration = video.lengthSeconds.map { Double($0) }
+                          return ResolvedMedia(title: video.title ?? "",
+                                               service: "YouTube",
+                                               thumbnailURL: thumb,
+                                               pageURL: "https://www.youtube.com/watch?v=" + id,
+                                               options: options)
+                      } catch {
+                          lastError = error
+                      }
+                  }
+                  throw lastError
+              }
+
+              static func buildOptions(from video: InvidiousVideo) -> [StreamOption] {
+                  var out: [StreamOption] = []
+                  if let hls = video.hls, let u = URL(string: hls) {
+                      out.append(StreamOption(label: "أعلى جودة (HLS)", kind: .auto, directURL: u,
+                                              filename: nil, isHLS: true, container: "MP4", size: nil))
+                  }
+                  for f in video.formatStreams ?? [] {
+                      guard let s = f.url, let u = URL(string: s) else { continue }
+                      let q = f.qualityLabel ?? f.resolution ?? ""
+                      let c = f.container ?? "MP4"
+                      let label = (q + " " + c).trimmingCharacters(in: .whitespacesAndNewlines)
+                      out.append(StreamOption(label: label.isEmpty ? "ملف فيديو" : label, kind: .auto,
+                                              directURL: u, filename: nil, isHLS: false, container: c,
+                                              size: parseSize(f.size ?? f.clen)))
+                  }
+                  for f in video.adaptiveFormats ?? [] {
+                      guard let s = f.url, let u = URL(string: s) else { continue }
+                      let t = f.type ?? ""
+                      if t.hasPrefix("audio") {
+                          let q = f.qualityLabel ?? f.bitrate ?? ""
+                          out.append(StreamOption(label: "صوت " + q, kind: .audio, directURL: u,
+                                                  filename: nil, isHLS: false, container: f.container ?? "M4A",
+                                                  size: parseSize(f.size ?? f.clen)))
+                      } else {
+                          let q = f.qualityLabel ?? f.resolution ?? ""
+                          out.append(StreamOption(label: (q.isEmpty ? "فيديو" : q) + " (بدون صوت)", kind: .mute,
+                                                  directURL: u, filename: nil, isHLS: false,
+                                                  container: f.container ?? "MP4", size: parseSize(f.size ?? f.clen)))
+                      }
+                  }
+                  return out
+              }
+
+              static func parseSize(_ s: String?) -> Int64? {
+                  guard let s = s else { return nil }
+                  return Int64(s)
+              }
+          }
+          __YTG_0012__
+
+          # ---------------- Sources/Engine/MetadataFetcher.swift ----------------
+          gen Sources/Engine/MetadataFetcher.swift <<'__YTG_0013__'
+          import Foundation
+
+          /// معلومات الفيديو (العنوان + المصغّر + الموقع) عبر oEmbed
           struct VideoMeta {
               var title: String?
               var thumbnailURL: String?
@@ -554,84 +1544,184 @@ jobs:
                   s.addingPercentEncoding(withAllowedCharacters: unreserved) ?? s
               }
           }
-          SWIFTEOF
+          __YTG_0013__
 
-          # ---------------- Engine: file downloader ----------------
-          gen Sources/Engine/FileDownloader.swift <<'SWIFTEOF'
+          # ---------------- Sources/Engine/PipedEngine.swift ----------------
+          gen Sources/Engine/PipedEngine.swift <<'__YTG_0014__'
           import Foundation
 
-          final class FileDownloader: NSObject, URLSessionDownloadDelegate {
+          // ============================================================
+          //  محرك Piped — بديل يوتيوب حر بدون أي مفاتيح API
+          // ============================================================
 
-              private var onProgress: ((Double) -> Void)?
-              private var continuation: CheckedContinuation<URL, Error>?
-              private var targetURL: URL?
-              private var finished = false
+          struct PipedStream: Codable {
+              var url: String?
+              var format: String?
+              var quality: String?
+              var mimeType: String?
+              var bitrate: Int?
+              var videoOnly: Bool?
+              var contentLength: Int?
+          }
 
-              private lazy var session: URLSession = URLSession(configuration: .default,
-                                                                 delegate: self,
-                                                                 delegateQueue: .main)
+          struct PipedVideo: Codable {
+              var title: String?
+              var thumbnailUrl: String?
+              var duration: Int?
+              var videoStreams: [PipedStream]?
+              var audioStreams: [PipedStream]?
+              var hls: String?
+          }
 
-              func download(url: URL,
-                            to destination: URL,
-                            progress: @escaping (Double) -> Void) async throws -> URL {
-                  finished = false
-                  onProgress = progress
-                  targetURL = destination
+          enum PipedEngine {
 
-                  return try await withCheckedThrowingContinuation { cont in
-                      self.continuation = cont
-                      var req = URLRequest(url: url)
-                      req.timeoutInterval = 900
-                      req.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 16_4 like Mac OS X) AppleWebKit/605.1.15",
-                                   forHTTPHeaderField: "User-Agent")
-                      let task = session.downloadTask(with: req)
-                      task.resume()
+              static func resolve(id: String, instances: [String]) async throws -> ResolvedMedia {
+                  var lastError: Error = EngineError.server("غير معروف")
+                  for raw in instances {
+                      var base = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                      while base.hasSuffix("/") { base.removeLast() }
+                      guard let endpoint = URL(string: base + "/streams/" + id) else { continue }
+                      do {
+                          var req = URLRequest(url: endpoint)
+                          req.timeoutInterval = 30
+                          let (data, resp) = try await URLSession.shared.data(for: req)
+                          if let http = resp as? HTTPURLResponse, http.statusCode == 403 || http.statusCode == 404 {
+                              continue
+                          }
+                          guard let video = try? JSONDecoder().decode(PipedVideo.self, from: data) else { continue }
+                          let options = buildOptions(from: video)
+                          if options.isEmpty { continue }
+                          return ResolvedMedia(title: video.title ?? "",
+                                               service: "YouTube",
+                                               thumbnailURL: video.thumbnailUrl,
+                                               pageURL: "https://www.youtube.com/watch?v=" + id,
+                                               options: options)
+                      } catch {
+                          lastError = error
+                      }
                   }
+                  throw lastError
               }
 
-              func urlSession(_ session: URLSession,
-                              downloadTask: URLSessionDownloadTask,
-                              didWriteData bytesWritten: Int64,
-                              totalBytesWritten: Int64,
-                              totalBytesExpectedToWrite: Int64) {
-                  guard totalBytesExpectedToWrite > 0 else { return }
-                  onProgress?(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite))
-              }
-
-              func urlSession(_ session: URLSession,
-                              downloadTask: URLSessionDownloadTask,
-                              didFinishDownloadingTo location: URL) {
-                  guard !finished else { return }
-                  do {
-                      guard let target = targetURL else { throw EngineError.server("لا يوجد مسار حفظ") }
-                      try? FileManager.default.removeItem(at: target)
-                      try FileManager.default.createDirectory(at: target.deletingLastPathComponent(),
-                                                             withIntermediateDirectories: true)
-                      try FileManager.default.moveItem(at: location, to: target)
-                      finished = true
-                      continuation?.resume(returning: target)
-                      continuation = nil
-                  } catch {
-                      finished = true
-                      continuation?.resume(throwing: error)
-                      continuation = nil
+              static func buildOptions(from video: PipedVideo) -> [StreamOption] {
+                  var out: [StreamOption] = []
+                  if let hls = video.hls, let u = URL(string: hls) {
+                      out.append(StreamOption(label: "أعلى جودة (HLS)", kind: .auto, directURL: u,
+                                              filename: nil, isHLS: true, container: "MP4", size: nil))
                   }
-              }
-
-              func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-                  guard let error = error, !finished else { return }
-                  finished = true
-                  continuation?.resume(throwing: error)
-                  continuation = nil
+                  for s in video.videoStreams ?? [] {
+                      guard let raw = s.url, let u = URL(string: raw) else { continue }
+                      let q = s.quality ?? ""
+                      let c = s.format ?? "MP4"
+                      let isMuxed = (s.videoOnly == false)
+                      let label = isMuxed ? (q + " " + c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                          : (q + " " + c + " (بدون صوت)").trimmingCharacters(in: .whitespacesAndNewlines)
+                      out.append(StreamOption(label: label, kind: isMuxed ? .auto : .mute,
+                                              directURL: u, filename: nil, isHLS: false, container: c,
+                                              size: s.contentLength.map { Int64($0) }))
+                  }
+                  for s in video.audioStreams ?? [] {
+                      guard let raw = s.url, let u = URL(string: raw) else { continue }
+                      let q = s.quality ?? ""
+                      let c = s.format ?? "M4A"
+                      out.append(StreamOption(label: "صوت " + q + " " + c, kind: .audio,
+                                              directURL: u, filename: nil, isHLS: false, container: c,
+                                              size: s.contentLength.map { Int64($0) }))
+                  }
+                  return out
               }
           }
-          SWIFTEOF
+          __YTG_0014__
 
-          # ---------------- Store: library ----------------
-          gen Sources/Store/LibraryStore.swift <<'SWIFTEOF'
+          # ---------------- Sources/Models/Models.swift ----------------
+          gen Sources/Models/Models.swift <<'__YTG_0015__'
+          import Foundation
+
+          /// فيديو محفوظ في المكتبة
+          struct SavedVideo: Identifiable, Codable, Hashable {
+              var id = UUID()
+              var title: String
+              var sourceURL: String
+              var relativePath: String
+              var service: String
+              var quality: String
+              var format: String
+              var fileSize: Int64
+              var duration: Double?
+              var thumbnailName: String?
+              var downloadedAt: Date = Date()
+
+              var fileURL: URL? {
+                  let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+                  return docs?.appendingPathComponent(relativePath)
+              }
+          }
+
+          /// مثيل cobalt
+          struct InstanceConfig: Identifiable, Codable, Hashable {
+              var id = UUID()
+              var name: String
+              var url: String
+              var path: String
+              var apiKey: String
+              var bearerToken: String
+              var enabled: Bool = true
+          }
+
+          /// نوع التحميل
+          enum DownloadKind: String, Codable, CaseIterable, Identifiable {
+              case auto, audio, mute
+              var id: String { rawValue }
+              var label: String {
+                  switch self {
+                  case .auto: return "فيديو + صوت"
+                  case .audio: return "صوت فقط"
+                  case .mute: return "فيديو صامت"
+                  }
+              }
+          }
+
+          /// المحركات المتاحة (بلا مفاتيح)
+          enum EngineType: String, CaseIterable, Identifiable {
+              case invidious, piped, cobalt
+              var id: String { rawValue }
+              var label: String {
+                  switch self {
+                  case .invidious: return "Invidious"
+                  case .piped: return "Piped"
+                  case .cobalt: return "Cobalt"
+                  }
+              }
+          }
+
+          /// خيار جودة/صيغة جاهز للتحميل
+          struct StreamOption: Identifiable, Hashable {
+              let id = UUID()
+              var label: String
+              var kind: DownloadKind
+              var directURL: URL
+              var filename: String?
+              var isHLS: Bool
+              var container: String
+              var size: Int64?
+          }
+
+          /// نتيجة استخراج كاملة (عدة جودات للاختيار)
+          struct ResolvedMedia {
+              var title: String
+              var service: String
+              var thumbnailURL: String?
+              var pageURL: String
+              var options: [StreamOption]
+          }
+          __YTG_0015__
+
+          # ---------------- Sources/Store/LibraryStore.swift ----------------
+          gen Sources/Store/LibraryStore.swift <<'__YTG_0016__'
           import Foundation
           import Combine
 
+          /// مكتبة الفيديوهات المحفوظة — حفظ دائم بكل التفاصيل
           final class LibraryStore: ObservableObject {
 
               @Published var items: [SavedVideo] = []
@@ -639,6 +1729,10 @@ jobs:
               private let indexURL: URL
               private let thumbDir: URL
               private let downloadsDir: URL
+
+              var documentsDir: URL {
+                  FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+              }
 
               init() {
                   let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -706,27 +1800,32 @@ jobs:
                   }
               }
           }
-          SWIFTEOF
+          __YTG_0016__
 
-          # ---------------- Store: settings ----------------
-          gen Sources/Store/SettingsStore.swift <<'SWIFTEOF'
+          # ---------------- Sources/Store/SettingsStore.swift ----------------
+          gen Sources/Store/SettingsStore.swift <<'__YTG_0017__'
           import Foundation
           import Combine
 
           final class SettingsStore: ObservableObject {
 
-              @Published var instances: [InstanceConfig] {
-                  didSet { saveInstances() }
-              }
-              @Published var defaultQuality: String {
-                  didSet { UserDefaults.standard.set(defaultQuality, forKey: "defaultQuality") }
-              }
-              @Published var defaultKindRaw: String {
-                  didSet { UserDefaults.standard.set(defaultKindRaw, forKey: "defaultKindRaw") }
-              }
-              @Published var defaultAudioFormat: String {
-                  didSet { UserDefaults.standard.set(defaultAudioFormat, forKey: "defaultAudioFormat") }
-              }
+              // محركات (بدون مفاتيح)
+              @Published var useInvidious: Bool { didSet { save() } }
+              @Published var usePiped: Bool { didSet { save() } }
+              @Published var useCobalt: Bool { didSet { save() } }
+              @Published var adBlockEnabled: Bool { didSet { save() } }
+
+              // مثيلات مخصصة (فارغة = تلقائي بقوائم محدثة من الإنترنت)
+              @Published var invidiousInstances: [String] { didSet { save() } }
+              @Published var pipedInstances: [String] { didSet { save() } }
+
+              // مثيلات cobalt
+              @Published var instances: [InstanceConfig] { didSet { save() } }
+
+              // افتراضيات
+              @Published var defaultQuality: String { didSet { save() } }
+              @Published var defaultKindRaw: String { didSet { save() } }
+              @Published var defaultAudioFormat: String { didSet { save() } }
 
               var defaultKind: DownloadKind {
                   DownloadKind(rawValue: defaultKindRaw) ?? .auto
@@ -755,34 +1854,56 @@ jobs:
 
               init() {
                   let d = UserDefaults.standard
+                  useInvidious = d.object(forKey: "useInvidious") as? Bool ?? true
+                  usePiped = d.object(forKey: "usePiped") as? Bool ?? true
+                  useCobalt = d.object(forKey: "useCobalt") as? Bool ?? true
+                  adBlockEnabled = d.object(forKey: "adBlockEnabled") as? Bool ?? true
+
+                  invidiousInstances = d.stringArray(forKey: "invidiousInstances") ?? []
+                  pipedInstances = d.stringArray(forKey: "pipedInstances") ?? []
+
                   if let data = d.data(forKey: "instances"),
                      let arr = try? JSONDecoder().decode([InstanceConfig].self, from: data) {
                       instances = arr
                   } else {
                       instances = Self.defaultInstances
                   }
+
                   defaultQuality = d.string(forKey: "defaultQuality") ?? "1080"
                   defaultKindRaw = d.string(forKey: "defaultKindRaw") ?? "auto"
                   defaultAudioFormat = d.string(forKey: "defaultAudioFormat") ?? "mp3"
               }
 
-              private func saveInstances() {
+              private func save() {
+                  let d = UserDefaults.standard
+                  d.set(useInvidious, forKey: "useInvidious")
+                  d.set(usePiped, forKey: "usePiped")
+                  d.set(useCobalt, forKey: "useCobalt")
+                  d.set(adBlockEnabled, forKey: "adBlockEnabled")
+                  d.set(invidiousInstances, forKey: "invidiousInstances")
+                  d.set(pipedInstances, forKey: "pipedInstances")
+                  d.set(defaultQuality, forKey: "defaultQuality")
+                  d.set(defaultKindRaw, forKey: "defaultKindRaw")
+                  d.set(defaultAudioFormat, forKey: "defaultAudioFormat")
                   if let data = try? JSONEncoder().encode(instances) {
-                      UserDefaults.standard.set(data, forKey: "instances")
+                      d.set(data, forKey: "instances")
                   }
               }
 
               func resetInstances() {
                   instances = Self.defaultInstances
+                  invidiousInstances = []
+                  pipedInstances = []
               }
           }
-          SWIFTEOF
+          __YTG_0017__
 
-          # ---------------- Views: shared components ----------------
-          gen Sources/Views/Components.swift <<'SWIFTEOF'
+          # ---------------- Sources/Views/Components.swift ----------------
+          gen Sources/Views/Components.swift <<'__YTG_0018__'
           import SwiftUI
           import UIKit
 
+          /// خلفية موحّدة للتطبيق
           struct Background: View {
               var body: some View {
                   LinearGradient(colors: [Color(red: 0.05, green: 0.06, blue: 0.13),
@@ -791,6 +1912,7 @@ jobs:
               }
           }
 
+          /// عرض المصغّر المحفوظ على القرص
           struct ThumbView: View {
               let name: String
               var body: some View {
@@ -809,6 +1931,7 @@ jobs:
               }
           }
 
+          /// شريحة اختيار (جودة / صيغة)
           struct QualityChip: View {
               let label: String
               let isSelected: Bool
@@ -828,6 +1951,7 @@ jobs:
               }
           }
 
+          /// صف معلومة في المشغّل
           struct InfoRow: View {
               let label: String
               let value: String
@@ -865,51 +1989,232 @@ jobs:
                   return f.string(from: d)
               }
           }
-          SWIFTEOF
+          __YTG_0018__
 
-          # ---------------- Views: home ----------------
-          gen Sources/Views/HomeView.swift <<'SWIFTEOF'
+          # ---------------- Sources/Views/ExtractSheet.swift ----------------
+          gen Sources/Views/ExtractSheet.swift <<'__YTG_0019__'
           import SwiftUI
           import AVKit
           import AVFoundation
+
+          // ============================================================
+          //  نافذة الاستخراج الموحدة — كشف + اختيار الجودة + إعادة تسمية + تحميل
+          // ============================================================
+
+          struct ExtractSheet: View {
+              @EnvironmentObject var library: LibraryStore
+              @EnvironmentObject var settings: SettingsStore
+              @Environment(\.dismiss) private var dismiss
+
+              let pageURL: String
+
+              @State private var resolved: ResolvedMedia?
+              @State private var loading = false
+              @State private var error: String?
+              @State private var selected: StreamOption?
+              @State private var renameText = ""
+              @State private var showRename = false
+              @State private var savedItem: SavedVideo?
+              @StateObject private var dm = DownloadManager()
+
+              var body: some View {
+                  NavigationStack {
+                      ZStack {
+                          Background().ignoresSafeArea()
+                          Group {
+                              if loading {
+                                  VStack(spacing: 12) {
+                                      ProgressView()
+                                      Text("جارٍ الاستخراج عبر المحركات…")
+                                          .font(.footnote)
+                                          .foregroundColor(.secondary)
+                                  }
+                              } else if let r = resolved {
+                                  optionsList(r)
+                              } else if let e = error {
+                                  VStack(spacing: 12) {
+                                      Image(systemName: "exclamationmark.triangle")
+                                          .font(.largeTitle)
+                                          .foregroundColor(.orange)
+                                      Text(e)
+                                          .multilineTextAlignment(.center)
+                                          .padding()
+                                      Button("إعادة المحاولة") { Task { await resolve() } }
+                                          .buttonStyle(.borderedProminent)
+                                  }
+                              } else {
+                                  VStack(spacing: 12) {
+                                      ProgressView()
+                                      Text("جارٍ الكشف…")
+                                          .foregroundColor(.secondary)
+                                  }
+                              }
+                          }
+                      }
+                      .navigationTitle("التحميل")
+                      .navigationBarTitleDisplayMode(.inline)
+                      .toolbar {
+                          ToolbarItem(placement: .cancellationAction) {
+                              Button("إغلاق") { dismiss() }
+                          }
+                      }
+                      .task { await resolve() }
+                      .alert("اسم الملف", isPresented: $showRename) {
+                          TextField("اسم الملف", text: $renameText)
+                          Button("تحميل") { confirmDownload() }
+                          Button("إلغاء", role: .cancel) {}
+                      } message: {
+                          Text("غيّر اسم الفيديو قبل التحميل (اختياري).")
+                      }
+                      .fullScreenCover(item: $savedItem) { item in
+                          PlayerView(item: item)
+                      }
+                  }
+              }
+
+              private func resolve() async {
+                  loading = true
+                  error = nil
+                  resolved = nil
+                  do {
+                      let r = try await Extractor.resolve(pageURL: pageURL, settings: settings)
+                      resolved = r
+                      if let first = r.options.first {
+                          selected = first
+                          renameText = r.title
+                      }
+                  } catch {
+                      error = (error as? EngineError)?.errorDescription ?? error.localizedDescription
+                  }
+                  loading = false
+              }
+
+              private func optionsList(_ r: ResolvedMedia) -> some View {
+                  VStack(spacing: 0) {
+                      if !r.title.isEmpty {
+                          VStack(alignment: .leading, spacing: 4) {
+                              Text(r.title).font(.headline).lineLimit(2)
+                              Text(r.service.isEmpty ? "موقع مدعوم" : r.service)
+                                  .font(.caption)
+                                  .foregroundColor(.secondary)
+                          }
+                          .frame(maxWidth: .infinity, alignment: .leading)
+                          .padding(.horizontal, 16)
+                          .padding(.top, 12)
+                      }
+                      ScrollView {
+                          VStack(spacing: 8) {
+                              ForEach(r.options) { opt in
+                                  optionRow(opt)
+                              }
+                          }
+                          .padding(16)
+                      }
+                      if dm.isDownloading {
+                          VStack(spacing: 6) {
+                              ProgressView(value: dm.progress)
+                                  .progressViewStyle(.linear)
+                                  .tint(.green)
+                              Text("جارٍ التحميل… \(Int(dm.progress * 100))%")
+                                  .font(.footnote)
+                                  .foregroundColor(.secondary)
+                          }
+                          .padding(16)
+                      }
+                      Button {
+                          guard let opt = selected else { return }
+                          renameText = r.title.isEmpty ? (opt.filename ?? "video") : r.title
+                          showRename = true
+                      } label: {
+                          Label(dm.isDownloading ? "جارٍ التحميل…" : "تحميل الآن",
+                                systemImage: "arrow.down.circle.fill")
+                              .font(.headline)
+                              .frame(maxWidth: .infinity)
+                              .padding(.vertical, 14)
+                              .background(Color.green.opacity(0.9))
+                              .foregroundColor(.white)
+                              .cornerRadius(14)
+                      }
+                      .disabled(selected == nil || dm.isDownloading)
+                      .padding(.horizontal, 16)
+                      .padding(.bottom, 14)
+                  }
+              }
+
+              private func optionRow(_ opt: StreamOption) -> some View {
+                  Button {
+                      selected = opt
+                  } label: {
+                      HStack(spacing: 10) {
+                          Image(systemName: iconFor(opt))
+                              .foregroundColor(.green)
+                          VStack(alignment: .leading, spacing: 3) {
+                              Text(opt.label)
+                                  .font(.subheadline.weight(.semibold))
+                              HStack(spacing: 8) {
+                                  Text(opt.container.uppercased())
+                                      .font(.caption2)
+                                      .foregroundColor(.secondary)
+                                  if let s = opt.size, s > 0 {
+                                      Text(Formatters.bytes(s))
+                                          .font(.caption2)
+                                          .foregroundColor(.secondary)
+                                  }
+                              }
+                          }
+                          Spacer()
+                          Image(systemName: selected == opt ? "checkmark.circle.fill" : "circle")
+                              .foregroundColor(selected == opt ? .green : .secondary)
+                      }
+                      .padding(12)
+                      .background(selected == opt ? Color.white.opacity(0.12) : Color.white.opacity(0.06))
+                      .cornerRadius(12)
+                  }
+                  .buttonStyle(.plain)
+              }
+
+              private func iconFor(_ opt: StreamOption) -> String {
+                  switch opt.kind {
+                  case .audio: return "music.note"
+                  case .mute: return "video.slash"
+                  default: return "play.rectangle.fill"
+                  }
+              }
+
+              private func confirmDownload() {
+                  guard let opt = selected, let r = resolved else { return }
+                  Task {
+                      do {
+                          let item = try await dm.download(option: opt,
+                                                           title: r.title,
+                                                           service: r.service,
+                                                           thumbnailURL: r.thumbnailURL,
+                                                           pageURL: r.pageURL,
+                                                           customName: renameText,
+                                                           library: library)
+                          savedItem = item
+                      } catch {
+                          error = error.localizedDescription
+                      }
+                  }
+              }
+          }
+          __YTG_0019__
+
+          # ---------------- Sources/Views/HomeView.swift ----------------
+          gen Sources/Views/HomeView.swift <<'__YTG_0020__'
+          import SwiftUI
           import UIKit
-
-          struct PreviewItem: Identifiable {
-              let id = UUID()
-              let url: URL
-          }
-
-          struct DetectedInfo {
-              var title: String
-              var service: String
-              var thumbnailURL: String?
-              var downloadURL: URL
-              var filename: String?
-          }
 
           struct HomeView: View {
               @EnvironmentObject var library: LibraryStore
               @EnvironmentObject var settings: SettingsStore
 
               @State private var urlText = ""
-              @State private var isExtracting = false
-              @State private var detected: DetectedInfo?
-              @State private var pickerItems: [CobaltPickerItem] = []
-              @State private var showPicker = false
-
-              @State private var quality = "1080"
-              @State private var kind: DownloadKind = .auto
-              @State private var audioFormat = "mp3"
-
-              @State private var downloading = false
-              @State private var progress: Double = 0
-              @State private var errorMessage: String?
+              @State private var showExtract = false
+              @State private var showBrowser = false
               @State private var showError = false
-              @State private var previewItem: PreviewItem?
-              @State private var justSaved: SavedVideo?
-
-              private let downloader = FileDownloader()
-              private let qualities = ["max", "2160", "1440", "1080", "720", "480", "360", "240", "144"]
+              @State private var errorMsg: String?
 
               var body: some View {
                   NavigationStack {
@@ -919,10 +2224,8 @@ jobs:
                               VStack(spacing: 16) {
                                   header
                                   urlField
-                                  if isExtracting { extractingView }
-                                  if let d = detected { detectedCard(d) }
-                                  if downloading { progressCard }
-                                  optionsCard
+                                  actions
+                                  engineStatus
                               }
                               .padding(.horizontal, 16)
                               .padding(.top, 10)
@@ -930,21 +2233,16 @@ jobs:
                           }
                       }
                       .navigationBarHidden(true)
-                      .onAppear {
-                          quality = settings.defaultQuality
-                          kind = settings.defaultKind
-                          audioFormat = settings.defaultAudioFormat
+                      .sheet(isPresented: $showExtract) {
+                          ExtractSheet(pageURL: urlText)
                       }
-                      .onChange(of: quality) { _ in if detected != nil { extract() } }
-                      .onChange(of: kind) { _ in if detected != nil { extract() } }
-                      .onChange(of: audioFormat) { _ in if detected != nil && kind == .audio { extract() } }
-                      .sheet(isPresented: $showPicker) { pickerSheet }
-                      .sheet(item: $previewItem) { item in PreviewPlayer(url: item.url) }
-                      .fullScreenCover(item: $justSaved) { item in PlayerView(item: item) }
+                      .fullScreenCover(isPresented: $showBrowser) {
+                          BrowserView(allowsDismiss: true, initialURL: urlText)
+                      }
                       .alert("خطأ", isPresented: $showError) {
                           Button("حسناً", role: .cancel) {}
                       } message: {
-                          Text(errorMessage ?? "")
+                          Text(errorMsg ?? "")
                       }
                   }
               }
@@ -963,7 +2261,7 @@ jobs:
                       }
                       Text("YT Grab")
                           .font(.system(size: 28, weight: .heavy, design: .rounded))
-                      Text("حمّل من أي موقع — بأعلى جودة")
+                      Text("حمّل من أي موقع — بلا مفاتيح")
                           .font(.footnote)
                           .foregroundColor(.secondary)
                   }
@@ -989,10 +2287,22 @@ jobs:
                                   .clipShape(Circle())
                           }
                       }
-                      Button(action: extract) {
+                      Button {
+                          guard !urlText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                              errorMsg = "الصق رابط الفيديو أولاً."
+                              showError = true
+                              return
+                          }
+                          guard URL(string: urlText) != nil else {
+                              errorMsg = "الرابط غير صالح."
+                              showError = true
+                              return
+                          }
+                          showExtract = true
+                      } label: {
                           HStack(spacing: 8) {
-                              if isExtracting { ProgressView().tint(.white) } else { Image(systemName: "magnifyingglass") }
-                              Text(isExtracting ? "جارٍ الكشف…" : "استخراج وكشف الفيديو")
+                              Image(systemName: "magnifyingglass")
+                              Text("استخراج وكشف الفيديو")
                                   .font(.headline)
                           }
                           .frame(maxWidth: .infinity)
@@ -1003,16 +2313,42 @@ jobs:
                           .foregroundColor(.white)
                           .cornerRadius(14)
                       }
-                      .disabled(isExtracting || urlText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                      .opacity(isExtracting ? 0.7 : 1)
                   }
               }
 
-              private var extractingView: some View {
-                  HStack(spacing: 10) {
-                      ProgressView()
-                      Text("جارٍ التواصل مع محرّك الاستخراج…")
-                          .font(.footnote)
+              private var actions: some View {
+                  Button {
+                      guard !urlText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                          errorMsg = "اكتب رابط موقع أولاً لفتحه في المتصفح."
+                          showError = true
+                          return
+                      }
+                      showBrowser = true
+                  } label: {
+                      Label("فتح في المتصفح المدمج (يشغّل ويكتشف ويحمّل)", systemImage: "safari.fill")
+                          .font(.headline)
+                          .frame(maxWidth: .infinity)
+                          .padding(.vertical, 13)
+                          .background(Color.white.opacity(0.08))
+                          .foregroundColor(.white)
+                          .cornerRadius(14)
+                  }
+              }
+
+              private var engineStatus: some View {
+                  VStack(alignment: .leading, spacing: 10) {
+                      Text("المحركات النشطة").font(.headline)
+                      HStack(spacing: 8) {
+                          statusChip("Invidious", on: settings.useInvidious)
+                          statusChip("Piped", on: settings.usePiped)
+                          statusChip("Cobalt", on: settings.useCobalt)
+                      }
+                      HStack(spacing: 8) {
+                          statusChip("مانع إعلانات", on: settings.adBlockEnabled)
+                          statusChip("كشف تلقائي", on: true)
+                      }
+                      Text("كلها تعمل بدون مفاتيح API، ويتم تجربة كل محرك ومثيل تلقائياً حتى ينجح واحد.")
+                          .font(.caption)
                           .foregroundColor(.secondary)
                   }
                   .padding(14)
@@ -1021,148 +2357,15 @@ jobs:
                   .cornerRadius(16)
               }
 
-              private func detectedCard(_ d: DetectedInfo) -> some View {
-                  VStack(alignment: .leading, spacing: 12) {
-                      HStack(spacing: 12) {
-                          if let t = d.thumbnailURL, let u = URL(string: t) {
-                              AsyncImage(url: u) { img in img.resizable().scaledToFill() }
-                              placeholder: { Color.gray.opacity(0.3) }
-                              .frame(width: 96, height: 60)
-                              .clipped()
-                              .cornerRadius(10)
-                          }
-                          VStack(alignment: .leading, spacing: 4) {
-                              Text(d.title).font(.headline).lineLimit(2)
-                              Text(d.service.isEmpty ? "موقع مدعوم" : d.service)
-                                  .font(.caption).foregroundColor(.secondary)
-                              Text("الجودة المطلوبة: \(qualityLabel())")
-                                  .font(.caption2).foregroundColor(.secondary)
-                          }
-                          Spacer(minLength: 0)
-                      }
-                      HStack(spacing: 8) {
-                          Button {
-                              previewItem = PreviewItem(url: d.downloadURL)
-                          } label: {
-                              Label("معاينة", systemImage: "play.circle")
-                          }
-                          .buttonStyle(.bordered)
-                          Button {
-                              UIPasteboard.general.string = d.downloadURL.absoluteString
-                          } label: {
-                              Label("نسخ الرابط", systemImage: "link")
-                          }
-                          .buttonStyle(.bordered)
-                      }
-                      Button(action: startDownload) {
-                          HStack(spacing: 8) {
-                              Image(systemName: "arrow.down.circle.fill")
-                              Text("تحميل الآن").font(.headline)
-                          }
-                          .frame(maxWidth: .infinity)
-                          .padding(.vertical, 13)
-                          .background(Color.green.opacity(0.9))
-                          .foregroundColor(.white)
-                          .cornerRadius(14)
-                      }
+              private func statusChip(_ text: String, on: Bool) -> some View {
+                  HStack(spacing: 5) {
+                      Circle().fill(on ? Color.green : Color.gray).frame(width: 7, height: 7)
+                      Text(text).font(.caption.weight(.semibold))
                   }
-                  .padding(14)
-                  .background(Color.white.opacity(0.06))
-                  .cornerRadius(16)
-              }
-
-              private var progressCard: some View {
-                  VStack(spacing: 10) {
-                      ProgressView(value: progress)
-                          .progressViewStyle(.linear)
-                          .tint(.green)
-                      Text("جارٍ التحميل… \(Int(progress * 100))%")
-                          .font(.footnote)
-                          .foregroundColor(.secondary)
-                  }
-                  .padding(14)
-                  .background(Color.white.opacity(0.06))
-                  .cornerRadius(16)
-              }
-
-              private var optionsCard: some View {
-                  VStack(alignment: .leading, spacing: 12) {
-                      Text("خيارات التحميل").font(.headline)
-
-                      Picker("النوع", selection: $kind) {
-                          ForEach(DownloadKind.allCases) { k in Text(k.label).tag(k) }
-                      }
-                      .pickerStyle(.segmented)
-
-                      if kind != .audio {
-                          VStack(alignment: .leading, spacing: 8) {
-                              Text("جودة الفيديو")
-                                  .font(.subheadline).foregroundColor(.secondary)
-                              LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-                                  ForEach(qualities, id: \.self) { q in
-                                      QualityChip(label: q == "max" ? "أعلى جودة" : "\(q)p",
-                                                  isSelected: q == quality,
-                                                  action: { quality = q })
-                                  }
-                              }
-                          }
-                      }
-
-                      if kind == .audio {
-                          VStack(alignment: .leading, spacing: 8) {
-                              Text("صيغة الصوت").font(.subheadline).foregroundColor(.secondary)
-                              HStack(spacing: 8) {
-                                  ForEach(["mp3", "opus", "wav", "ogg", "best"], id: \.self) { f in
-                                      QualityChip(label: f.uppercased(),
-                                                  isSelected: f == audioFormat,
-                                                  action: { audioFormat = f })
-                                  }
-                              }
-                          }
-                      }
-                  }
-                  .padding(14)
-                  .background(Color.white.opacity(0.06))
-                  .cornerRadius(16)
-              }
-
-              private var pickerSheet: some View {
-                  NavigationStack {
-                      ScrollView {
-                          LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 12)], spacing: 12) {
-                              ForEach(pickerItems.indices, id: \.self) { i in
-                                  let item = pickerItems[i]
-                                  Button {
-                                      if let u = item.url {
-                                          showPicker = false
-                                          urlText = u
-                                          extract()
-                                      }
-                                  } label: {
-                                      VStack(spacing: 6) {
-                                          if let t = item.thumb, let u = URL(string: t) {
-                                              AsyncImage(url: u) { img in img.resizable().scaledToFill() }
-                                              placeholder: { Color.gray.opacity(0.3) }
-                                              .frame(width: 110, height: 150)
-                                              .clipped()
-                                              .cornerRadius(10)
-                                          } else {
-                                              RoundedRectangle(cornerRadius: 10)
-                                                  .fill(Color.gray.opacity(0.3))
-                                                  .frame(width: 110, height: 150)
-                                          }
-                                          Label(item.type == "photo" ? "صورة" : "فيديو",
-                                                systemImage: item.type == "photo" ? "photo" : "play.rectangle")
-                                              .font(.caption)
-                                      }
-                                  }
-                              }
-                          }
-                          .padding()
-                      }
-                      .navigationTitle("اختر العنصر")
-                      .navigationBarTitleDisplayMode(.inline)
-                  }
+                  .padding(.horizontal, 10)
+                  .padding(.vertical, 6)
+                  .background(Color.white.opacity(0.08))
+                  .clipShape(Capsule())
               }
 
               private func paste() {
@@ -1170,124 +2373,11 @@ jobs:
                       urlText = s.trimmingCharacters(in: .whitespacesAndNewlines)
                   }
               }
-
-              private func show(error: String) {
-                  errorMessage = error
-                  showError = true
-              }
-
-              private func qualityLabel() -> String {
-                  if kind == .audio { return "صوت \(audioFormat.uppercased())" }
-                  if quality == "max" { return "أعلى جودة" }
-                  return "\(quality)p"
-              }
-
-              private func extract() {
-                  let raw = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
-                  guard !raw.isEmpty else { show(error: "الصق رابط الفيديو أولاً."); return }
-                  guard URL(string: raw) != nil else { show(error: "الرابط غير صالح."); return }
-
-                  Task {
-                      isExtracting = true
-                      detected = nil
-                      pickerItems = []
-                      do {
-                          async let meta = MetadataFetcher.fetch(for: raw)
-                          async let outcome = CobaltClient.extract(source: raw,
-                                                                   instances: settings.instances,
-                                                                   kind: kind,
-                                                                   quality: quality,
-                                                                   audioFormat: audioFormat)
-                          let (m, out) = try await (meta, outcome)
-                          switch out {
-                          case .downloadable(let url, let filename):
-                              detected = DetectedInfo(title: m.title ?? filename ?? "فيديو",
-                                                      service: m.service,
-                                                      thumbnailURL: m.thumbnailURL,
-                                                      downloadURL: url,
-                                                      filename: filename)
-                          case .picker(let items):
-                              pickerItems = items
-                              showPicker = true
-                          }
-                      } catch {
-                          show(error: (error as? EngineError)?.errorDescription ?? error.localizedDescription)
-                      }
-                      isExtracting = false
-                  }
-              }
-
-              private func startDownload() {
-                  guard let d = detected else { return }
-                  Task {
-                      downloading = true
-                      progress = 0
-                      do {
-                          let dest = library.makeDestinationURL(filename: d.filename)
-                          let savedURL = try await downloader.download(url: d.downloadURL, to: dest) { p in
-                              progress = p
-                          }
-
-                          let attrs = try? FileManager.default.attributesOfItem(atPath: savedURL.path)
-                          let size = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
-
-                          var duration: Double? = nil
-                          if kind != .audio {
-                              let asset = AVURLAsset(url: savedURL)
-                              duration = try? await asset.load(.duration).seconds
-                          }
-
-                          let id = UUID()
-                          var thumbName: String? = nil
-                          if let t = d.thumbnailURL {
-                              thumbName = await library.saveThumbnail(remoteURL: t, for: id)
-                          }
-
-                          let ext = savedURL.pathExtension
-                          let item = SavedVideo(id: id,
-                                                title: d.title,
-                                                sourceURL: urlText,
-                                                relativePath: "Downloads/" + savedURL.lastPathComponent,
-                                                service: d.service.isEmpty ? "موقع" : d.service,
-                                                quality: qualityLabel(),
-                                                format: ext.isEmpty ? "MP4" : ext.uppercased(),
-                                                fileSize: size,
-                                                duration: duration,
-                                                thumbnailName: thumbName,
-                                                downloadedAt: Date())
-                          library.add(item)
-                          downloading = false
-                          justSaved = item
-                      } catch {
-                          downloading = false
-                          show(error: "فشل التحميل: \(error.localizedDescription)")
-                      }
-                  }
-              }
           }
+          __YTG_0020__
 
-          struct PreviewPlayer: View {
-              @Environment(\.dismiss) private var dismiss
-              let url: URL
-
-              var body: some View {
-                  NavigationStack {
-                      VideoPlayer(player: AVPlayer(url: url))
-                          .ignoresSafeArea()
-                          .navigationTitle("معاينة")
-                          .navigationBarTitleDisplayMode(.inline)
-                          .toolbar {
-                              ToolbarItem(placement: .cancellationAction) {
-                                  Button("إغلاق") { dismiss() }
-                              }
-                          }
-                  }
-              }
-          }
-          SWIFTEOF
-
-          # ---------------- Views: library ----------------
-          gen Sources/Views/LibraryView.swift <<'SWIFTEOF'
+          # ---------------- Sources/Views/LibraryView.swift ----------------
+          gen Sources/Views/LibraryView.swift <<'__YTG_0021__'
           import SwiftUI
 
           struct LibraryView: View {
@@ -1377,15 +2467,16 @@ jobs:
                   .padding(.vertical, 4)
               }
           }
-          SWIFTEOF
+          __YTG_0021__
 
-          # ---------------- Views: player ----------------
-          gen Sources/Views/PlayerView.swift <<'SWIFTEOF'
+          # ---------------- Sources/Views/PlayerView.swift ----------------
+          gen Sources/Views/PlayerView.swift <<'__YTG_0022__'
           import SwiftUI
           import AVKit
           import AVFoundation
           import UIKit
 
+          /// أقوى مشغّل — تشغيل + كل التفاصيل + مشاركة + حذف
           struct PlayerView: View {
               let item: SavedVideo
               @EnvironmentObject var library: LibraryStore
@@ -1481,10 +2572,10 @@ jobs:
                   }
               }
           }
-          SWIFTEOF
+          __YTG_0022__
 
-          # ---------------- Views: settings ----------------
-          gen Sources/Views/SettingsView.swift <<'SWIFTEOF'
+          # ---------------- Sources/Views/SettingsView.swift ----------------
+          gen Sources/Views/SettingsView.swift <<'__YTG_0023__'
           import SwiftUI
 
           struct SettingsView: View {
@@ -1493,22 +2584,24 @@ jobs:
               @State private var editorItem: InstanceConfig?
               @State private var editorIsNew = false
 
-              private func enabledBinding(for id: UUID) -> Binding<Bool> {
-                  Binding(
-                      get: { settings.instances.first(where: { $0.id == id })?.enabled ?? false },
-                      set: { newValue in
-                          if let idx = settings.instances.firstIndex(where: { $0.id == id }) {
-                              settings.instances[idx].enabled = newValue
-                          }
-                      }
-                  )
-              }
-
               var body: some View {
                   NavigationStack {
                       ZStack {
                           Background().ignoresSafeArea()
                           Form {
+                              Section("محركات الاستخراج (تعمل بدون مفاتيح)") {
+                                  Toggle("Invidious — يوتيوب حر", isOn: $settings.useInvidious)
+                                  Toggle("Piped — بديل يوتيوب", isOn: $settings.usePiped)
+                                  Toggle("Cobalt — كل المواقع", isOn: $settings.useCobalt)
+                                  Text("يتم تجربة كل المحركات والمثيلات تلقائياً بالترتيب حتى ينجح واحد. القوائم تتحدث من الإنترنت.")
+                                      .font(.footnote)
+                                      .foregroundColor(.secondary)
+                              }
+
+                              Section("المتصفح") {
+                                  Toggle("مانع إعلانات قوي", isOn: $settings.adBlockEnabled)
+                              }
+
                               Section("جودة التحميل الافتراضية") {
                                   Picker("الجودة", selection: $settings.defaultQuality) {
                                       Text("أعلى جودة").tag("max")
@@ -1534,7 +2627,13 @@ jobs:
                                   }
                               }
 
-                              Section("مثيلات الاستخراج (محركات التحميل)") {
+                              InstanceStringsEditor(title: "مثيلات Invidious (فارغ = تلقائي)",
+                                                    items: $settings.invidiousInstances)
+
+                              InstanceStringsEditor(title: "مثيلات Piped (فارغ = تلقائي)",
+                                                    items: $settings.pipedInstances)
+
+                              Section("مثيلات Cobalt") {
                                   ForEach(settings.instances) { inst in
                                       HStack {
                                           VStack(alignment: .leading, spacing: 4) {
@@ -1542,7 +2641,7 @@ jobs:
                                               Text(inst.url).font(.caption2).foregroundColor(.secondary)
                                           }
                                           Spacer()
-                                          Toggle("", isOn: enabledBinding(for: inst.id)).labelsHidden()
+                                          Toggle("", isOn: cobaltEnabledBinding(for: inst.id)).labelsHidden()
                                           Button {
                                               editorItem = inst
                                               editorIsNew = false
@@ -1551,12 +2650,8 @@ jobs:
                                           }
                                           .buttonStyle(.borderless)
                                       }
-                                      .swipeActions {
-                                          Button(role: .destructive) {
-                                              settings.instances.removeAll { $0.id == inst.id }
-                                          } label: { Label("حذف", systemImage: "trash") }
-                                      }
                                   }
+                                  .onDelete { settings.instances.remove(atOffsets: $0) }
                                   Button {
                                       editorItem = InstanceConfig(name: "", url: "", path: "", apiKey: "", bearerToken: "", enabled: true)
                                       editorIsNew = true
@@ -1566,14 +2661,13 @@ jobs:
                               }
 
                               Section("أقوى طريقة: مثيلك الخاص (بلا حدود)") {
-                                  Text("شغّل محرك cobalt على أي كمبيوتر أو سيرفر بأمر واحد:\n\ndocker run -d -p 9000:9000 --name cobalt ghcr.io/imputnet/cobalt:latest\n\nثم أضف عنوانه كمثيل جديد، مثلاً http://192.168.1.10:9000 — وستحصل على تحميل بلا حدود وبدون مفاتيح من كل المواقع المدعومة.")
+                                  Text("شغّل محرك cobalt على أي كمبيوتر أو سيرفر بأمر واحد:\n\ndocker run -d -p 9000:9000 --name cobalt ghcr.io/imputnet/cobalt:latest\n\nثم أضف عنوانه كمثيل، مثلاً http://192.168.1.10:9000 — تحميل بلا حدود من كل المواقع.")
                                       .font(.footnote)
                                       .foregroundColor(.secondary)
-                                  Link("مستندات cobalt", destination: URL(string: "https://github.com/imputnet/cobalt")!)
                               }
 
                               Section {
-                                  Button("استعادة المثيلات الافتراضية", role: .destructive) {
+                                  Button("استعادة الإعدادات الافتراضية", role: .destructive) {
                                       settings.resetInstances()
                                   }
                               }
@@ -1588,6 +2682,50 @@ jobs:
                               } else if let idx = settings.instances.firstIndex(where: { $0.id == saved.id }) {
                                   settings.instances[idx] = saved
                               }
+                          }
+                      }
+                  }
+              }
+
+              private func cobaltEnabledBinding(for id: UUID) -> Binding<Bool> {
+                  Binding(
+                      get: { settings.instances.first(where: { $0.id == id })?.enabled ?? false },
+                      set: { newValue in
+                          if let idx = settings.instances.firstIndex(where: { $0.id == id }) {
+                              settings.instances[idx].enabled = newValue
+                          }
+                      }
+                  )
+              }
+          }
+
+          struct InstanceStringsEditor: View {
+              let title: String
+              @Binding var items: [String]
+              @State private var newItem = ""
+
+              var body: some View {
+                  Section(title) {
+                      if items.isEmpty {
+                          Text("تلقائي: يستخدم قوائم مثيلات محدثة من الإنترنت.")
+                              .font(.caption)
+                              .foregroundColor(.secondary)
+                      }
+                      ForEach(items, id: \.self) { it in
+                          Text(it).font(.caption)
+                      }
+                      .onDelete { items.remove(atOffsets: $0) }
+                      HStack {
+                          TextField("https://...", text: $newItem)
+                              .textInputAutocapitalization(.never)
+                              .autocorrectionDisabled(true)
+                              .keyboardType(.URL)
+                          Button("إضافة") {
+                              let t = newItem.trimmingCharacters(in: .whitespacesAndNewlines)
+                              if !t.isEmpty && !items.contains(t) {
+                                  items.append(t)
+                              }
+                              newItem = ""
                           }
                       }
                   }
@@ -1639,11 +2777,6 @@ jobs:
                                   .autocorrectionDisabled(true)
                               Toggle("مفعّل", isOn: $enabled)
                           }
-                          Section {
-                              Text("غالبية المثيلات العامة تطلب مفتاح API الآن. أسرع حل بلا حدود: شغّل مثيلك الخاص بأمر Docker وأضف رابطه هنا.")
-                                  .font(.footnote)
-                                  .foregroundColor(.secondary)
-                          }
                       }
                       .navigationTitle(isNew ? "مثيل جديد" : "تعديل المثيل")
                       .toolbar {
@@ -1659,14 +2792,12 @@ jobs:
                   }
               }
           }
-          SWIFTEOF
+          __YTG_0023__
 
           echo "==> اكتمل توليد كل الملفات:"
           find . -type f -not -path './.git/*' | sort
 
-      # ----------------------------------------------------------------------
-      # 2) تثبيت XcodeGen (أداة توليد مشروع Xcode من ملف YAML)
-      # ----------------------------------------------------------------------
+      # 2) تثبيت XcodeGen
       - name: Install XcodeGen
         shell: bash
         run: |
@@ -1685,9 +2816,7 @@ jobs:
           fi
           xcodegen --version
 
-      # ----------------------------------------------------------------------
       # 3) توليد مشروع Xcode
-      # ----------------------------------------------------------------------
       - name: Generate Xcode project
         shell: bash
         run: |
@@ -1696,9 +2825,7 @@ jobs:
           echo "==> تم توليد المشروع:"
           ls -la YTGrab.xcodeproj
 
-      # ----------------------------------------------------------------------
-      # 4) البناء بدون توقيع (جاهز لـ TrollStore)
-      # ----------------------------------------------------------------------
+      # 4) البناء بدون توقيع
       - name: Build unsigned app (iphoneos)
         shell: bash
         run: |
@@ -1715,16 +2842,14 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             build
 
-      # ----------------------------------------------------------------------
       # 5) تحزيم .ipa و .tipa
-      # ----------------------------------------------------------------------
       - name: Package IPA + TIPA
         shell: bash
         run: |
           set -eo pipefail
           APP="build/Build/Products/Release-iphoneos/YTGrab.app"
           if [ ! -d "$APP" ]; then
-            echo "==> لم يتم العثور على التطبيق المبنى. المحتوى المتوفر:"
+            echo "==> لم يتم العثور على التطبيق المبنى."
             find build -maxdepth 4 -type d 2>/dev/null || true
             exit 1
           fi
@@ -1735,9 +2860,7 @@ jobs:
           echo "==> الملفات الناتجة:"
           ls -la YTGrab.ipa YTGrab.tipa
 
-      # ----------------------------------------------------------------------
-      # 6) رفع الملفات كـ Artifact للتحميل
-      # ----------------------------------------------------------------------
+      # 6) رفع الملفات
       - name: Upload artifact
         if: success()
         uses: actions/upload-artifact@v4
