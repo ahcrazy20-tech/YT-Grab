@@ -1407,7 +1407,6 @@ jobs:
                           let options = buildOptions(from: video)
                           if options.isEmpty { continue }
                           let thumb = video.videoThumbnails?.compactMap { $0.url }.last
-                          let duration = video.lengthSeconds.map { Double($0) }
                           return ResolvedMedia(title: video.title ?? "",
                                                service: "YouTube",
                                                thumbnailURL: thumb,
@@ -2010,7 +2009,7 @@ jobs:
 
               @State private var resolved: ResolvedMedia?
               @State private var loading = false
-              @State private var error: String?
+              @State private var errorMessage: String?
               @State private var selected: StreamOption?
               @State private var renameText = ""
               @State private var showRename = false
@@ -2031,7 +2030,7 @@ jobs:
                                   }
                               } else if let r = resolved {
                                   optionsList(r)
-                              } else if let e = error {
+                              } else if let e = errorMessage {
                                   VStack(spacing: 12) {
                                       Image(systemName: "exclamationmark.triangle")
                                           .font(.largeTitle)
@@ -2074,7 +2073,7 @@ jobs:
 
               private func resolve() async {
                   loading = true
-                  error = nil
+                  errorMessage = nil
                   resolved = nil
                   do {
                       let r = try await Extractor.resolve(pageURL: pageURL, settings: settings)
@@ -2084,7 +2083,7 @@ jobs:
                           renameText = r.title
                       }
                   } catch {
-                      error = (error as? EngineError)?.errorDescription ?? error.localizedDescription
+                      errorMessage = (error as? EngineError)?.errorDescription ?? error.localizedDescription
                   }
                   loading = false
               }
@@ -2194,7 +2193,7 @@ jobs:
                                                            library: library)
                           savedItem = item
                       } catch {
-                          error = error.localizedDescription
+                          errorMessage = error.localizedDescription
                       }
                   }
               }
@@ -2237,7 +2236,7 @@ jobs:
                           ExtractSheet(pageURL: urlText)
                       }
                       .fullScreenCover(isPresented: $showBrowser) {
-                          BrowserView(allowsDismiss: true, initialURL: urlText)
+                          BrowserView(initialURL: urlText, allowsDismiss: true)
                       }
                       .alert("خطأ", isPresented: $showError) {
                           Button("حسناً", role: .cancel) {}
