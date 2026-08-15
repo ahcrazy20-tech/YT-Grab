@@ -1,1268 +1,433 @@
-name: Build Video Downloader Pro for TrollStore
+name: Build Video Downloader Pro
 
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
     branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-13
+    runs-on: macos-latest
+    timeout-minutes: 60
     
     steps:
-    - name: Checkout Repository
+    - name: Checkout
       uses: actions/checkout@v4
       
     - name: Setup Xcode
-      uses: maxim-lobanov/setup-xcode@v1
-      with:
-        xcode-version: '14.3.1'
+      run: |
+        sudo xcode-select -switch /Applications/Xcode_15.0.app
+        xcodebuild -version
     
-    - name: Install Build Tools
+    - name: Install Tools
       run: |
         brew install ldid
-        sudo gem install cocoapods
-        brew install zip
+        brew install cocoapods
     
-    - name: Create Complete Project Structure
+    - name: Create Full Project
       run: |
-        # إنشاء هيكل المشروع
-        mkdir -p VideoDownloaderPro/VideoDownloaderPro.xcodeproj
-        mkdir -p VideoDownloaderPro/VideoDownloaderPro/App
-        mkdir -p VideoDownloaderPro/VideoDownloaderPro/Browser
-        mkdir -p VideoDownloaderPro/VideoDownloaderPro/Downloader
-        mkdir -p VideoDownloaderPro/VideoDownloaderPro/Player
-        mkdir -p VideoDownloaderPro/VideoDownloaderPro/Library
-        mkdir -p VideoDownloaderPro/VideoDownloaderPro/Models
-        mkdir -p VideoDownloaderPro/VideoDownloaderPro/AdBlocker
-        mkdir -p VideoDownloaderPro/VideoDownloaderPro/Settings
-        mkdir -p VideoDownloaderPro/VideoDownloaderPro/Helpers
-        mkdir -p VideoDownloaderPro/VideoDownloaderPro/Resources
-        mkdir -p VideoDownloaderPro/VideoDownloaderPro/Assets.xcassets/AppIcon.appiconset
-    
-    - name: Create project.pbxproj
-      run: |
-        cat > VideoDownloaderPro/VideoDownloaderPro.xcodeproj/project.pbxproj << 'PBXPROJ_EOF'
-        // !$*UTF8*$!
-        {
-        	archiveVersion = 1;
-        	classes = {
-        	};
-        	objectVersion = 56;
-        	objects = {
-        		001 = {isa = PBXBuildFile; fileRef = 002; };
-        		002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
-        		003 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-        		004 = {isa = PBXGroup; children = (002,); path = VideoDownloaderPro; sourceTree = "<group>"; };
-        		005 = {isa = PBXNativeTarget; buildConfigurationList = 006; buildPhases = (003,); buildRules = (); dependencies = (); name = VideoDownloaderPro; productName = VideoDownloaderPro; productReference = 007; productType = "com.apple.product-type.application"; };
-        		006 = {isa = XCConfigurationList; buildConfigurations = (008,009,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-        		007 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VideoDownloaderPro.app; sourceTree = BUILT_PRODUCTS_DIR; };
-        		008 = {isa = XCBuildConfiguration; buildSettings = {PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; IPHONEOS_DEPLOYMENT_TARGET = 16.0; PRODUCT_BUNDLE_IDENTIFIER = "com.videodownloader.pro"; CODE_SIGN_IDENTITY = ""; CODE_SIGNING_REQUIRED = NO; CODE_SIGNING_ALLOWED = NO; }; name = Debug; };
-        		009 = {isa = XCBuildConfiguration; buildSettings = {PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; IPHONEOS_DEPLOYMENT_TARGET = 16.0; PRODUCT_BUNDLE_IDENTIFIER = "com.videodownloader.pro"; CODE_SIGN_IDENTITY = ""; CODE_SIGNING_REQUIRED = NO; CODE_SIGNING_ALLOWED = NO; }; name = Release; };
-        		010 = {isa = PBXProject; attributes = {LastUpgradeCheck = 1430; }; buildConfigurationList = 011; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, ar,); mainGroup = 004; productRefGroup = 004; projectDirPath = ""; projectRoot = ""; targets = (005,); };
-        		011 = {isa = XCConfigurationList; buildConfigurations = (008,009,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-        	};
-        	rootObject = 010;
-        }
-        PBXPROJ_EOF
-    
-    - name: Create Podfile
-      run: |
-        cat > VideoDownloaderPro/Podfile << 'PODFILE_EOF'
-        platform :ios, '16.0'
-        use_frameworks!
-        inhibit_all_warnings!
-
-        target 'VideoDownloaderPro' do
-          # Networking
-          pod 'Alamofire', '~> 5.8'
-          
-          # Video Player
-          pod 'MobileVLCKit', '~> 3.5'
-          
-          # Database
-          pod 'RealmSwift', '~> 10.45'
-          
-          # UI
-          pod 'SnapKit', '~> 5.6'
-          pod 'SVProgressHUD', '~> 2.2'
-          pod 'Kingfisher', '~> 7.10'
-          
-          # Utilities
-          pod 'SwiftyJSON', '~> 5.0'
-        end
-
-        post_install do |installer|
-          installer.pods_project.targets.each do |target|
-            target.build_configurations.each do |config|
-              config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
-              config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
-              config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
-            end
-          end
-        end
-        PODFILE_EOF
-    
-    - name: Create Info.plist
-      run: |
-        cat > VideoDownloaderPro/VideoDownloaderPro/Info.plist << 'PLIST_EOF'
+        # Create project structure
+        mkdir -p VideoDownloaderPro/VideoDownloaderPro
+        
+        # Create Info.plist
+        cat > VideoDownloaderPro/VideoDownloaderPro/Info.plist << 'EOF'
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
         <dict>
-        	<key>CFBundleDevelopmentRegion</key>
-        	<string>ar</string>
-        	<key>CFBundleDisplayName</key>
-        	<string>Video Pro</string>
-        	<key>CFBundleExecutable</key>
-        	<string>$(EXECUTABLE_NAME)</string>
-        	<key>CFBundleIdentifier</key>
-        	<string>com.videodownloader.pro</string>
-        	<key>CFBundleInfoDictionaryVersion</key>
-        	<string>6.0</string>
-        	<key>CFBundleName</key>
-        	<string>$(PRODUCT_NAME)</string>
-        	<key>CFBundlePackageType</key>
-        	<string>APPL</string>
-        	<key>CFBundleShortVersionString</key>
-        	<string>1.0</string>
-        	<key>CFBundleVersion</key>
-        	<string>1</string>
-        	<key>LSRequiresIPhoneOS</key>
-        	<true/>
-        	<key>UIApplicationSceneManifest</key>
-        	<dict>
-        		<key>UIApplicationSupportsMultipleScenes</key>
-        		<false/>
-        		<key>UISceneConfigurations</key>
-        		<dict>
-        			<key>UIWindowSceneSessionRoleApplication</key>
-        			<array>
-        				<dict>
-        					<key>UISceneConfigurationName</key>
-        					<string>Default Configuration</string>
-        					<key>UISceneDelegateClassName</key>
-        					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
-        				</dict>
-        			</array>
-        		</dict>
-        	</dict>
-        	<key>UIApplicationSupportsIndirectInputEvents</key>
-        	<true/>
-        	<key>UILaunchStoryboardName</key>
-        	<string>LaunchScreen</string>
-        	<key>UIRequiredDeviceCapabilities</key>
-        	<array>
-        		<string>armv7</string>
-        	</array>
-        	<key>UISupportedInterfaceOrientations</key>
-        	<array>
-        		<string>UIInterfaceOrientationPortrait</string>
-        		<string>UIInterfaceOrientationLandscapeLeft</string>
-        		<string>UIInterfaceOrientationLandscapeRight</string>
-        	</array>
-        	<key>UIFileSharingEnabled</key>
-        	<true/>
-        	<key>LSSupportsOpeningDocumentsInPlace</key>
-        	<true/>
-        	<key>NSAppTransportSecurity</key>
-        	<dict>
-        		<key>NSAllowsArbitraryLoads</key>
-        		<true/>
-        		<key>NSAllowsArbitraryLoadsInWebContent</key>
-        		<true/>
-        	</dict>
-        	<key>UIBackgroundModes</key>
-        	<array>
-        		<string>audio</string>
-        		<string>fetch</string>
-        		<string>processing</string>
-        	</array>
-        	<key>NSPhotoLibraryAddUsageDescription</key>
-        	<string>نحتاج الوصول لحفظ الفيديوهات</string>
-        	<key>NSPhotoLibraryUsageDescription</key>
-        	<string>نحتاج الوصول لحفظ الفيديوهات</string>
+            <key>CFBundleExecutable</key>
+            <string>VideoDownloaderPro</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.video.downloader.pro</string>
+            <key>CFBundleName</key>
+            <string>Video Pro</string>
+            <key>CFBundleVersion</key>
+            <string>1.0</string>
+            <key>CFBundleShortVersionString</key>
+            <string>1.0</string>
+            <key>LSRequiresIPhoneOS</key>
+            <true/>
+            <key>UILaunchStoryboardName</key>
+            <string>LaunchScreen</string>
+            <key>UIApplicationSceneManifest</key>
+            <dict>
+                <key>UIApplicationSupportsMultipleScenes</key>
+                <false/>
+            </dict>
+            <key>NSAppTransportSecurity</key>
+            <dict>
+                <key>NSAllowsArbitraryLoads</key>
+                <true/>
+            </dict>
         </dict>
         </plist>
-        PLIST_EOF
-    
-    - name: Create AppDelegate.swift
-      run: |
-        cat > VideoDownloaderPro/VideoDownloaderPro/App/AppDelegate.swift << 'SWIFT_EOF'
+        EOF
+        
+        # Create main.swift
+        cat > VideoDownloaderPro/VideoDownloaderPro/main.swift << 'EOF'
         import UIKit
-        import RealmSwift
-        import SVProgressHUD
+        import WebKit
 
         @main
         class AppDelegate: UIResponder, UIApplicationDelegate {
-
             var window: UIWindow?
-
+            
             func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-                
-                configureRealm()
-                configureAppearance()
-                AdBlockManager.shared.loadBlockLists()
-                
+                window = UIWindow(frame: UIScreen.main.bounds)
+                window?.rootViewController = TabBarController()
+                window?.makeKeyAndVisible()
                 return true
             }
-            
-            private func configureRealm() {
-                let config = Realm.Configuration(
-                    schemaVersion: 1,
-                    migrationBlock: { migration, oldSchemaVersion in
-                        if oldSchemaVersion < 1 {}
-                    }
-                )
-                Realm.Configuration.defaultConfiguration = config
-                _ = try? Realm()
-            }
-            
-            private func configureAppearance() {
-                SVProgressHUD.setDefaultStyle(.dark)
-                SVProgressHUD.setDefaultMaskType(.black)
-                
-                let appearance = UINavigationBarAppearance()
-                appearance.configureWithOpaqueBackground()
-                UINavigationBar.appearance().standardAppearance = appearance
-                UINavigationBar.appearance().scrollEdgeAppearance = appearance
-            }
-
-            func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
-                return UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
-            }
         }
-        SWIFT_EOF
-    
-    - name: Create SceneDelegate.swift
-      run: |
-        cat > VideoDownloaderPro/VideoDownloaderPro/App/SceneDelegate.swift << 'SWIFT_EOF'
-        import UIKit
 
-        class SceneDelegate: UIResponder, UIWindowSceneDelegate {
-
-            var window: UIWindow?
-
-            func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
-                guard let windowScene = (scene as? UIWindowScene) else { return }
-                
-                window = UIWindow(windowScene: windowScene)
-                let tabBarController = MainTabBarController()
-                window?.rootViewController = tabBarController
-                window?.makeKeyAndVisible()
-            }
-
-            func sceneDidEnterBackground(_ scene: UIScene) {
-                DownloadManager.shared.saveState()
-            }
-        }
-        SWIFT_EOF
-    
-    - name: Create MainTabBarController.swift
-      run: |
-        cat > VideoDownloaderPro/VideoDownloaderPro/App/MainTabBarController.swift << 'SWIFT_EOF'
-        import UIKit
-
-        class MainTabBarController: UITabBarController {
-            
+        class TabBarController: UITabBarController {
             override func viewDidLoad() {
                 super.viewDidLoad()
-                setupViewControllers()
-                setupAppearance()
-            }
-            
-            private func setupViewControllers() {
-                let browserVC = BrowserViewController()
-                let browserNav = UINavigationController(rootViewController: browserVC)
-                browserNav.tabBarItem = UITabBarItem(title: "متصفح", image: UIImage(systemName: "safari"), tag: 0)
                 
-                let downloadsVC = DownloadsViewController()
-                let downloadsNav = UINavigationController(rootViewController: downloadsVC)
-                downloadsNav.tabBarItem = UITabBarItem(title: "التحميلات", image: UIImage(systemName: "arrow.down.circle.fill"), tag: 1)
+                let browser = UINavigationController(rootViewController: BrowserViewController())
+                browser.tabBarItem = UITabBarItem(title: "متصفح", image: UIImage(systemName: "safari"), tag: 0)
                 
-                let libraryVC = LibraryViewController()
-                let libraryNav = UINavigationController(rootViewController: libraryVC)
-                libraryNav.tabBarItem = UITabBarItem(title: "المكتبة", image: UIImage(systemName: "film.stack"), tag: 2)
+                let library = UINavigationController(rootViewController: LibraryViewController())
+                library.tabBarItem = UITabBarItem(title: "المكتبة", image: UIImage(systemName: "film"), tag: 1)
                 
-                let settingsVC = SettingsViewController()
-                let settingsNav = UINavigationController(rootViewController: settingsVC)
-                settingsNav.tabBarItem = UITabBarItem(title: "الإعدادات", image: UIImage(systemName: "gear"), tag: 3)
-                
-                viewControllers = [browserNav, downloadsNav, libraryNav, settingsNav]
-            }
-            
-            private func setupAppearance() {
-                tabBar.tintColor = .systemBlue
-                tabBar.backgroundColor = .systemBackground
-                tabBar.isTranslucent = false
+                viewControllers = [browser, library]
             }
         }
-        SWIFT_EOF
-    
-    - name: Create BrowserViewController.swift (Main Browser)
-      run: |
-        cat > VideoDownloaderPro/VideoDownloaderPro/Browser/BrowserViewController.swift << 'SWIFT_EOF'
-        import UIKit
-        import WebKit
-        import SnapKit
-        import SVProgressHUD
 
-        class BrowserViewController: UIViewController {
-            
+        class BrowserViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, UITextFieldDelegate {
             private var webView: WKWebView!
-            private var progressView: UIProgressView!
-            private var urlTextField: UITextField!
-            private var toolBar: UIToolbar!
-            private var detectedVideos: [VideoInfo] = []
-            private var observation: NSKeyValueObservation?
+            private var urlField: UITextField!
+            private var detectedVideos: [(url: String, title: String)] = []
             
             override func viewDidLoad() {
                 super.viewDidLoad()
-                setupUI()
-                setupWebView()
-                setupToolbar()
-                loadHomePage()
-            }
-            
-            private func setupWebView() {
+                title = "متصفح"
+                view.backgroundColor = .systemBackground
+                
+                // URL Field
+                urlField = UITextField(frame: CGRect(x: 20, y: 100, width: view.frame.width - 40, height: 44))
+                urlField.borderStyle = .roundedRect
+                urlField.placeholder = "أدخل الرابط..."
+                urlField.delegate = self
+                urlField.autocapitalizationType = .none
+                urlField.keyboardType = .webSearch
+                view.addSubview(urlField)
+                
+                // WebView Setup
                 let config = WKWebViewConfiguration()
                 config.allowsInlineMediaPlayback = true
-                config.allowsPictureInPictureMediaPlayback = true
                 config.mediaTypesRequiringUserActionForPlayback = []
-                config.preferences.javaScriptEnabled = true
-                config.preferences.javaScriptCanOpenWindowsAutomatically = true
-                
-                if #available(iOS 14.0, *) {
-                    config.defaultWebpagePreferences.allowsContentJavaScript = true
-                }
-                
-                config.applicationNameForUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.4 Mobile/15E148 Safari/604.1"
                 
                 let contentController = WKUserContentController()
                 
-                let adBlockScript = WKUserScript(source: AdBlockManager.shared.getAdBlockScript(), injectionTime: .atDocumentStart, forMainFrameOnly: false)
-                contentController.addUserScript(adBlockScript)
+                // Ad Blocker Script
+                let adBlockScript = """
+                (function() {
+                    const blockedDomains = ['googlesyndication.com','doubleclick.net','ads','banner'];
+                    const originalFetch = window.fetch;
+                    window.fetch = function(...args) {
+                        const url = typeof args[0] === 'string' ? args[0] : args[0].url;
+                        if (blockedDomains.some(d => url.includes(d))) return Promise.reject();
+                        return originalFetch.apply(this, args);
+                    };
+                    
+                    function removeAds() {
+                        document.querySelectorAll('[id*="ad"],[class*="ad"]').forEach(el => {
+                            if (el.offsetHeight < 200) el.remove();
+                        });
+                    }
+                    setInterval(removeAds, 2000);
+                })();
+                """
+                contentController.addUserScript(WKUserScript(source: adBlockScript, injectionTime: .atDocumentStart, forMainFrameOnly: false))
                 
-                let videoDetectorScript = WKUserScript(source: VideoDetector.getScript(), injectionTime: .atDocumentEnd, forMainFrameOnly: false)
-                contentController.addUserScript(videoDetectorScript)
-                
-                contentController.add(self, name: "videoDetector")
-                contentController.add(self, name: "consoleLog")
+                // Video Detector Script
+                let videoScript = """
+                (function() {
+                    function detectVideos() {
+                        document.querySelectorAll('video').forEach((v, i) => {
+                            if (v.src || v.currentSrc) {
+                                console.log('VIDEO:', v.src || v.currentSrc);
+                            }
+                        });
+                    }
+                    
+                    const originalFetch = window.fetch;
+                    window.fetch = function(...args) {
+                        const url = typeof args[0] === 'string' ? args[0] : args[0].url;
+                        if (url.includes('.m3u8') || url.includes('.mp4')) {
+                            console.log('STREAM:', url);
+                        }
+                        return originalFetch.apply(this, args);
+                    };
+                    
+                    setInterval(detectVideos, 3000);
+                })();
+                """
+                contentController.addUserScript(WKUserScript(source: videoScript, injectionTime: .atDocumentEnd, forMainFrameOnly: false))
                 
                 config.userContentController = contentController
                 
-                webView = WKWebView(frame: .zero, configuration: config)
+                webView = WKWebView(frame: CGRect(x: 0, y: 160, width: view.frame.width, height: view.frame.height - 260), configuration: config)
                 webView.navigationDelegate = self
                 webView.uiDelegate = self
                 webView.allowsBackForwardNavigationGestures = true
-                
                 view.addSubview(webView)
-                webView.snp.makeConstraints { make in
-                    make.top.equalTo(progressView.snp.bottom)
-                    make.leading.trailing.equalToSuperview()
-                    make.bottom.equalTo(toolBar.snp.top)
-                }
                 
-                observation = webView.observe(\.estimatedProgress, options: .new) { [weak self] webView, _ in
-                    self?.progressView.progress = Float(webView.estimatedProgress)
-                    self?.progressView.isHidden = webView.estimatedProgress >= 1.0
-                }
-            }
-            
-            private func setupUI() {
-                view.backgroundColor = .systemBackground
-                title = "متصفح"
+                // Toolbar
+                let toolbar = UIToolbar(frame: CGRect(x: 0, y: view.frame.height - 100, width: view.frame.width, height: 44))
+                let back = UIBarButtonItem(image: UIImage(systemName: "chevron.left"), style: .plain, target: self, action: #selector(goBack))
+                let forward = UIBarButtonItem(image: UIImage(systemName: "chevron.right"), style: .plain, target: self, action: #selector(goForward))
+                let refresh = UIBarButtonItem(image: UIImage(systemName: "arrow.clockwise"), style: .plain, target: self, action: #selector(reload))
+                let space = UIBarButtonItem(systemItem: .flexibleSpace)
+                let download = UIBarButtonItem(image: UIImage(systemName: "arrow.down.circle.fill"), style: .plain, target: self, action: #selector(showDownloads))
+                toolbar.items = [back, space, forward, space, refresh, space, download]
+                view.addSubview(toolbar)
                 
-                let containerView = UIView()
-                containerView.backgroundColor = .systemBackground
-                view.addSubview(containerView)
-                
-                containerView.snp.makeConstraints { make in
-                    make.top.equalTo(view.safeAreaLayoutGuide)
-                    make.leading.trailing.equalToSuperview()
-                    make.height.equalTo(50)
-                }
-                
-                let menuButton = UIButton(type: .system)
-                menuButton.setImage(UIImage(systemName: "line.3.horizontal"), for: .normal)
-                menuButton.addTarget(self, action: #selector(showMenu), for: .touchUpInside)
-                containerView.addSubview(menuButton)
-                
-                menuButton.snp.makeConstraints { make in
-                    make.leading.equalToSuperview().offset(12)
-                    make.centerY.equalToSuperview()
-                    make.width.height.equalTo(40)
-                }
-                
-                urlTextField = UITextField()
-                urlTextField.borderStyle = .roundedRect
-                urlTextField.placeholder = "ابحث أو أدخل الرابط..."
-                urlTextField.keyboardType = .webSearch
-                urlTextField.autocapitalizationType = .none
-                urlTextField.autocorrectionType = .no
-                urlTextField.returnKeyType = .go
-                urlTextField.clearButtonMode = .whileEditing
-                urlTextField.delegate = self
-                urlTextField.backgroundColor = .secondarySystemBackground
-                urlTextField.layer.cornerRadius = 10
-                containerView.addSubview(urlTextField)
-                
-                urlTextField.snp.makeConstraints { make in
-                    make.leading.equalTo(menuButton.snp.trailing).offset(8)
-                    make.trailing.equalToSuperview().offset(-12)
-                    make.centerY.equalToSuperview()
-                    make.height.equalTo(36)
-                }
-                
-                progressView = UIProgressView(progressViewStyle: .bar)
-                progressView.progressTintColor = .systemBlue
-                progressView.isHidden = true
-                view.addSubview(progressView)
-                
-                progressView.snp.makeConstraints { make in
-                    make.top.equalTo(containerView.snp.bottom)
-                    make.leading.trailing.equalToSuperview()
-                    make.height.equalTo(3)
-                }
-            }
-            
-            private func setupToolbar() {
-                toolBar = UIToolbar()
-                toolBar.backgroundColor = .systemBackground
-                view.addSubview(toolBar)
-                
-                toolBar.snp.makeConstraints { make in
-                    make.leading.trailing.equalToSuperview()
-                    make.bottom.equalTo(view.safeAreaLayoutGuide)
-                    make.height.equalTo(44)
-                }
-                
-                let backButton = UIBarButtonItem(image: UIImage(systemName: "chevron.left"), style: .plain, target: self, action: #selector(goBack))
-                let forwardButton = UIBarButtonItem(image: UIImage(systemName: "chevron.right"), style: .plain, target: self, action: #selector(goForward))
-                let refreshButton = UIBarButtonItem(image: UIImage(systemName: "arrow.clockwise"), style: .plain, target: self, action: #selector(reload))
-                let flexSpace = UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil)
-                let downloadButton = UIBarButtonItem(image: UIImage(systemName: "arrow.down.circle.fill"), style: .plain, target: self, action: #selector(showDownloadOptions))
-                let shareButton = UIBarButtonItem(image: UIImage(systemName: "square.and.arrow.up"), style: .plain, target: self, action: #selector(share))
-                
-                toolBar.items = [backButton, flexSpace, forwardButton, flexSpace, refreshButton, flexSpace, downloadButton, flexSpace, shareButton]
-            }
-            
-            private func loadHomePage() {
+                // Load Google
                 if let url = URL(string: "https://www.google.com") {
                     webView.load(URLRequest(url: url))
                 }
             }
             
-            @objc private func showMenu() {
-                let alert = UIAlertController(title: "القائمة", message: nil, preferredStyle: .actionSheet)
-                
-                alert.addAction(UIAlertAction(title: "الصفحة الرئيسية", style: .default) { [weak self] _ in
-                    self?.loadHomePage()
+            @objc func goBack() { webView.goBack() }
+            @objc func goForward() { webView.goForward() }
+            @objc func reload() { webView.reload() }
+            
+            @objc func showDownloads() {
+                let alert = UIAlertController(title: "تحميل فيديو", message: "أدخل رابط الفيديو", preferredStyle: .alert)
+                alert.addTextField { field in
+                    field.placeholder = "https://example.com/video.mp4"
+                    field.text = self.webView.url?.absoluteString
+                }
+                alert.addAction(UIAlertAction(title: "تحميل", style: .default) { _ in
+                    if let urlText = alert.textFields?.first?.text, let url = URL(string: urlText) {
+                        self.downloadVideo(url)
+                    }
                 })
-                
-                alert.addAction(UIAlertAction(title: "مسح البيانات", style: .destructive) { [weak self] _ in
-                    self?.clearData()
-                })
-                
-                alert.addAction(UIAlertAction(title: "وضع سطح المكتب", style: .default) { [weak self] _ in
-                    self?.toggleDesktopMode()
-                })
-                
                 alert.addAction(UIAlertAction(title: "إلغاء", style: .cancel))
                 present(alert, animated: true)
             }
             
-            @objc private func goBack() { webView.goBack() }
-            @objc private func goForward() { webView.goForward() }
-            @objc private func reload() { webView.reload() }
-            
-            @objc private func showDownloadOptions() {
-                guard !detectedVideos.isEmpty else {
-                    showAlert("لا توجد فيديوهات", message: "لم يتم اكتشاف أي فيديوهات في هذه الصفحة")
-                    return
-                }
-                
-                let alert = UIAlertController(title: "اختر فيديو (\(detectedVideos.count))", message: nil, preferredStyle: .actionSheet)
-                
-                let uniqueVideos = Array(Set(detectedVideos.map { $0.url })).compactMap { url in
-                    detectedVideos.first(where: { $0.url == url })
-                }
-                
-                for (index, video) in uniqueVideos.prefix(10).enumerated() {
-                    let title = "\(index + 1). \(video.title) [\(video.type)]"
-                    alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
-                        self?.downloadVideo(video)
-                    })
-                }
-                
-                alert.addAction(UIAlertAction(title: "إلغاء", style: .cancel))
-                present(alert, animated: true)
-            }
-            
-            @objc private func share() {
-                guard let url = webView.url else { return }
-                let activityVC = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-                present(activityVC, animated: true)
-            }
-            
-            private func clearData() {
-                WKWebsiteDataStore.default().fetchDataRecords(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes()) { records in
-                    WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), for: records) {
-                        DispatchQueue.main.async {
-                            SVProgressHUD.showSuccess(withStatus: "تم مسح البيانات")
-                        }
-                    }
-                }
-            }
-            
-            private func toggleDesktopMode() {
-                let script = "var meta = document.createElement('meta'); meta.name = 'viewport'; meta.content = 'width=1024'; document.getElementsByTagName('head')[0].appendChild(meta);"
-                webView.evaluateJavaScript(script)
-                webView.reload()
-            }
-            
-            private func downloadVideo(_ video: VideoInfo) {
-                SVProgressHUD.show(withStatus: "جاري التحميل...")
-                
-                DownloadManager.shared.downloadVideo(video) { progress in
-                    DispatchQueue.main.async {
-                        SVProgressHUD.showProgress(Float(progress), status: "التحميل: \(Int(progress * 100))%")
-                    }
-                } completion: { result in
-                    DispatchQueue.main.async {
-                        SVProgressHUD.dismiss()
-                        switch result {
-                        case .success:
-                            SVProgressHUD.showSuccess(withStatus: "تم التحميل بنجاح!")
-                        case .failure(let error):
-                            SVProgressHUD.showError(withStatus: "فشل: \(error.localizedDescription)")
-                        }
-                    }
-                }
-            }
-            
-            private func showAlert(_ title: String, message: String) {
-                let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "حسناً", style: .default))
-                present(alert, animated: true)
-            }
-            
-            deinit {
-                observation?.invalidate()
-            }
-        }
-
-        extension BrowserViewController: WKScriptMessageHandler {
-            func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-                if message.name == "videoDetector", let dict = message.body as? [String: Any] {
-                    let video = VideoInfo(
-                        url: dict["url"] as? String ?? "",
-                        title: dict["title"] as? String ?? "فيديو",
-                        type: dict["type"] as? String ?? "unknown",
-                        quality: dict["quality"] as? String,
-                        duration: dict["duration"] as? Double
-                    )
+            func downloadVideo(_ url: URL) {
+                let session = URLSession.shared
+                let task = session.downloadTask(with: url) { localURL, response, error in
+                    guard let localURL = localURL else { return }
                     
-                    if !video.url.isEmpty && !detectedVideos.contains(where: { $0.url == video.url }) {
-                        detectedVideos.append(video)
-                        print("🎥 تم اكتشاف: \(video.title)")
+                    let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                    let destinationURL = documentsPath.appendingPathComponent("video_\(Int(Date().timeIntervalSince1970)).mp4")
+                    
+                    try? FileManager.default.moveItem(at: localURL, to: destinationURL)
+                    
+                    DispatchQueue.main.async {
+                        let alert = UIAlertController(title: "تم التحميل", message: "تم حفظ الفيديو بنجاح", preferredStyle: .alert)
+                        alert.addAction(UIAlertAction(title: "حسناً", style: .default))
+                        self.present(alert, animated: true)
                     }
                 }
-            }
-        }
-
-        extension BrowserViewController: WKNavigationDelegate {
-            func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-                detectedVideos.removeAll()
+                task.resume()
             }
             
-            func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-                urlTextField.text = webView.url?.absoluteString
-            }
-            
-            func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-                decisionHandler(.allow)
-            }
-        }
-
-        extension BrowserViewController: WKUIDelegate {
-            func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-                if navigationAction.targetFrame == nil {
-                    webView.load(navigationAction.request)
-                }
-                return nil
-            }
-        }
-
-        extension BrowserViewController: UITextFieldDelegate {
             func textFieldShouldReturn(_ textField: UITextField) -> Bool {
                 guard let text = textField.text, !text.isEmpty else { return false }
-                
                 var urlString = text
-                if !text.hasPrefix("http://") && !text.hasPrefix("https://") {
-                    if text.contains(".") {
-                        urlString = "https://" + text
-                    } else {
-                        urlString = "https://www.google.com/search?q=" + (text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? text)
-                    }
+                if !text.hasPrefix("http") {
+                    urlString = text.contains(".") ? "https://" + text : "https://www.google.com/search?q=" + text
                 }
-                
                 if let url = URL(string: urlString) {
                     webView.load(URLRequest(url: url))
                 }
-                
                 textField.resignFirstResponder()
                 return true
             }
-        }
-        SWIFT_EOF
-    
-    - name: Create VideoDetector.swift
-      run: |
-        cat > VideoDownloaderPro/VideoDownloaderPro/Browser/VideoDetector.swift << 'SWIFT_EOF'
-        import Foundation
-
-        class VideoDetector {
-            static func getScript() -> String {
-                return """
-                (function() {
-                    console.log('🎬 Video Detector Active');
-                    
-                    function detectHTML5Videos() {
-                        document.querySelectorAll('video').forEach((video, index) => {
-                            const sources = [video.src, video.currentSrc];
-                            video.querySelectorAll('source').forEach(s => sources.push(s.src));
-                            
-                            sources.filter(Boolean).forEach(src => {
-                                window.webkit.messageHandlers.videoDetector.postMessage({
-                                    type: 'html5',
-                                    url: src,
-                                    title: document.title || 'فيديو ' + (index + 1),
-                                    quality: video.videoHeight ? video.videoHeight + 'p' : 'unknown',
-                                    duration: video.duration || 0
-                                });
-                            });
-                        });
-                    }
-                    
-                    const originalFetch = window.fetch;
-                    window.fetch = function(...args) {
-                        const url = typeof args[0] === 'string' ? args[0] : args[0].url;
-                        if (url && (url.includes('.m3u8') || url.includes('.mpd') || url.includes('.mp4'))) {
-                            window.webkit.messageHandlers.videoDetector.postMessage({
-                                type: 'stream',
-                                url: url,
-                                title: document.title,
-                                format: url.includes('.m3u8') ? 'HLS' : 'MP4'
-                            });
-                        }
-                        return originalFetch.apply(this, args);
-                    };
-                    
-                    const originalXHR = XMLHttpRequest.prototype.open;
-                    XMLHttpRequest.prototype.open = function(method, url) {
-                        if (typeof url === 'string' && (url.includes('.m3u8') || url.includes('.mp4'))) {
-                            window.webkit.messageHandlers.videoDetector.postMessage({
-                                type: 'xhr',
-                                url: url,
-                                title: document.title
-                            });
-                        }
-                        return originalXHR.apply(this, arguments);
-                    };
-                    
-                    const observer = new MutationObserver(detectHTML5Videos);
-                    observer.observe(document.body || document.documentElement, {childList: true, subtree: true});
-                    
-                    setTimeout(detectHTML5Videos, 1000);
-                    setTimeout(detectHTML5Videos, 3000);
-                })();
-                """
+            
+            func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+                urlField.text = webView.url?.absoluteString
             }
         }
-        SWIFT_EOF
-    
-    - name: Create AdBlockManager.swift (Enhanced)
-      run: |
-        cat > VideoDownloaderPro/VideoDownloaderPro/AdBlocker/AdBlockManager.swift << 'SWIFT_EOF'
-        import Foundation
 
-        class AdBlockManager {
-            static let shared = AdBlockManager()
-            private init() {}
-            
-            func loadBlockLists() {
-                print("🛡️ AdBlocker Loaded")
-            }
-            
-            func getAdBlockScript() -> String {
-                return """
-                (function() {
-                    'use strict';
-                    console.log('🛡️ AdBlocker Activated');
-                    
-                    const blockedDomains = [
-                        'googlesyndication.com','googleadservices.com','doubleclick.net',
-                        'google-analytics.com','googletagmanager.com','facebook.com/tr',
-                        'connect.facebook.net','adnxs.com','advertising.com',
-                        'criteo.com','outbrain.com','taboola.com','popads.net',
-                        'propellerads.com','imasdk.googleapis.com','pubads.g.doubleclick.net'
-                    ];
-                    
-                    const originalFetch = window.fetch;
-                    window.fetch = function(...args) {
-                        const url = typeof args[0] === 'string' ? args[0] : args[0].url;
-                        if (blockedDomains.some(d => url.includes(d))) {
-                            console.log('🚫 Blocked:', url);
-                            return Promise.reject(new Error('Blocked'));
-                        }
-                        return originalFetch.apply(this, args);
-                    };
-                    
-                    const originalXHR = XMLHttpRequest.prototype.open;
-                    XMLHttpRequest.prototype.open = function(method, url) {
-                        if (blockedDomains.some(d => url.includes(d))) {
-                            console.log('🚫 Blocked XHR:', url);
-                            return;
-                        }
-                        return originalXHR.apply(this, arguments);
-                    };
-                    
-                    function removeAds() {
-                        const selectors = [
-                            '[id*="ad"]','[class*="ad"]','[id*="banner"]',
-                            '[class*="banner"]','iframe[src*="doubleclick"]',
-                            '.ad-container','.advertisement'
-                        ];
-                        
-                        selectors.forEach(sel => {
-                            document.querySelectorAll(sel).forEach(el => {
-                                if (el.offsetHeight < 250) el.remove();
-                            });
-                        });
-                    }
-                    
-                    window.open = () => null;
-                    
-                    setInterval(removeAds, 2000);
-                    const observer = new MutationObserver(removeAds);
-                    observer.observe(document.body || document.documentElement, {childList: true, subtree: true});
-                })();
-                """
-            }
-        }
-        SWIFT_EOF
-    
-    - name: Create DownloadManager.swift
-      run: |
-        cat > VideoDownloaderPro/VideoDownloaderPro/Downloader/DownloadManager.swift << 'SWIFT_EOF'
-        import Foundation
-        import Alamofire
-        import RealmSwift
-
-        class DownloadManager {
-            static let shared = DownloadManager()
-            private init() {}
-            
-            private var activeDownloads: [String: DownloadRequest] = [:]
-            
-            func downloadVideo(_ video: VideoInfo, progress: @escaping (Double) -> Void, completion: @escaping (Result<URL, Error>) -> Void) {
-                
-                let fileName = "\(UUID().uuidString).mp4"
-                let destination: DownloadRequest.Destination = { _, _ in
-                    let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                    let fileURL = documentsURL.appendingPathComponent(fileName)
-                    return (fileURL, [.removePreviousFile, .createIntermediateDirectories])
-                }
-                
-                let headers: HTTPHeaders = [
-                    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_4 like Mac OS X) AppleWebKit/605.1.15",
-                    "Accept": "*/*"
-                ]
-                
-                let request = AF.download(video.url, headers: headers, to: destination)
-                    .downloadProgress { prog in
-                        progress(prog.fractionCompleted)
-                    }
-                    .response { [weak self] response in
-                        self?.activeDownloads.removeValue(forKey: video.url)
-                        
-                        switch response.result {
-                        case .success(let url):
-                            guard let url = url else {
-                                completion(.failure(NSError(domain: "", code: -1)))
-                                return
-                            }
-                            self?.saveToDatabase(video: video, localURL: url)
-                            completion(.success(url))
-                        case .failure(let error):
-                            completion(.failure(error))
-                        }
-                    }
-                
-                activeDownloads[video.url] = request
-            }
-            
-            private func saveToDatabase(video: VideoInfo, localURL: URL) {
-                let realm = try! Realm()
-                let videoObject = VideoObject()
-                videoObject.id = UUID().uuidString
-                videoObject.title = video.title
-                videoObject.originalURL = video.url
-                videoObject.localPath = localURL.path
-                videoObject.downloadDate = Date()
-                videoObject.fileSize = getFileSize(localURL)
-                
-                try! realm.write {
-                    realm.add(videoObject)
-                }
-            }
-            
-            private func getFileSize(_ url: URL) -> Int64 {
-                (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
-            }
-            
-            func saveState() {}
-            
-            func cancelDownload(_ url: String) {
-                activeDownloads[url]?.cancel()
-                activeDownloads.removeValue(forKey: url)
-            }
-        }
-        SWIFT_EOF
-    
-    - name: Create Models
-      run: |
-        cat > VideoDownloaderPro/VideoDownloaderPro/Models/VideoInfo.swift << 'SWIFT_EOF'
-        import Foundation
-
-        struct VideoInfo: Hashable {
-            let url: String
-            let title: String
-            let type: String
-            var quality: String?
-            var duration: Double?
-        }
-        SWIFT_EOF
-        
-        cat > VideoDownloaderPro/VideoDownloaderPro/Models/VideoObject.swift << 'SWIFT_EOF'
-        import Foundation
-        import RealmSwift
-
-        class VideoObject: Object {
-            @Persisted(primaryKey: true) var id: String
-            @Persisted var title: String
-            @Persisted var originalURL: String
-            @Persisted var localPath: String
-            @Persisted var downloadDate: Date
-            @Persisted var thumbnail: Data?
-            @Persisted var fileSize: Int64
-        }
-        SWIFT_EOF
-    
-    - name: Create LibraryViewController.swift
-      run: |
-        cat > VideoDownloaderPro/VideoDownloaderPro/Library/LibraryViewController.swift << 'SWIFT_EOF'
-        import UIKit
-        import RealmSwift
-        import SnapKit
-
-        class LibraryViewController: UIViewController {
-            
+        class LibraryViewController: UIViewController, UITableViewDelegate, UITableViewDataSource {
             private var tableView: UITableView!
-            private var videos: Results<VideoObject>!
-            private var notificationToken: NotificationToken?
+            private var videos: [URL] = []
             
             override func viewDidLoad() {
                 super.viewDidLoad()
                 title = "المكتبة"
                 view.backgroundColor = .systemBackground
-                setupTableView()
+                
+                tableView = UITableView(frame: view.bounds)
+                tableView.delegate = self
+                tableView.dataSource = self
+                tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
+                view.addSubview(tableView)
+                
                 loadVideos()
             }
             
-            private func setupTableView() {
-                tableView = UITableView()
-                tableView.delegate = self
-                tableView.dataSource = self
-                tableView.register(VideoCell.self, forCellReuseIdentifier: "VideoCell")
-                tableView.rowHeight = 100
-                view.addSubview(tableView)
-                
-                tableView.snp.makeConstraints { make in
-                    make.edges.equalToSuperview()
-                }
+            override func viewWillAppear(_ animated: Bool) {
+                super.viewWillAppear(animated)
+                loadVideos()
             }
             
-            private func loadVideos() {
-                let realm = try! Realm()
-                videos = realm.objects(VideoObject.self).sorted(byKeyPath: "downloadDate", ascending: false)
-                
-                notificationToken = videos.observe { [weak self] _ in
-                    self?.tableView.reloadData()
-                }
+            func loadVideos() {
+                let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                videos = (try? FileManager.default.contentsOfDirectory(at: documentsPath, includingPropertiesForKeys: nil))?.filter { $0.pathExtension == "mp4" } ?? []
+                tableView.reloadData()
             }
             
-            deinit {
-                notificationToken?.invalidate()
-            }
-        }
-
-        extension LibraryViewController: UITableViewDelegate, UITableViewDataSource {
             func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-                return videos?.count ?? 0
+                return videos.count
             }
             
             func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-                let cell = tableView.dequeueReusableCell(withIdentifier: "VideoCell", for: indexPath) as! VideoCell
-                if let video = videos?[indexPath.row] {
-                    cell.configure(with: video)
-                }
+                let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
+                cell.textLabel?.text = videos[indexPath.row].lastPathComponent
                 return cell
             }
             
             func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
                 tableView.deselectRow(at: indexPath, animated: true)
-                guard let video = videos?[indexPath.row] else { return }
-                
                 let playerVC = VideoPlayerViewController()
-                playerVC.videoURL = URL(fileURLWithPath: video.localPath)
+                playerVC.videoURL = videos[indexPath.row]
                 playerVC.modalPresentationStyle = .fullScreen
                 present(playerVC, animated: true)
             }
             
             func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
                 if editingStyle == .delete {
-                    guard let video = videos?[indexPath.row] else { return }
-                    
-                    try? FileManager.default.removeItem(atPath: video.localPath)
-                    
-                    let realm = try! Realm()
-                    try! realm.write {
-                        realm.delete(video)
-                    }
+                    try? FileManager.default.removeItem(at: videos[indexPath.row])
+                    videos.remove(at: indexPath.row)
+                    tableView.deleteRows(at: [indexPath], with: .automatic)
                 }
             }
         }
-
-        class VideoCell: UITableViewCell {
-            private let titleLabel = UILabel()
-            private let dateLabel = UILabel()
-            private let sizeLabel = UILabel()
-            
-            override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
-                super.init(style: style, reuseIdentifier: reuseIdentifier)
-                setupUI()
-            }
-            
-            required init?(coder: NSCoder) {
-                fatalError("init(coder:) has not been implemented")
-            }
-            
-            private func setupUI() {
-                titleLabel.font = .boldSystemFont(ofSize: 16)
-                dateLabel.font = .systemFont(ofSize: 12)
-                dateLabel.textColor = .secondaryLabel
-                sizeLabel.font = .systemFont(ofSize: 12)
-                sizeLabel.textColor = .secondaryLabel
-                
-                contentView.addSubview(titleLabel)
-                contentView.addSubview(dateLabel)
-                contentView.addSubview(sizeLabel)
-                
-                titleLabel.snp.makeConstraints { make in
-                    make.top.equalToSuperview().offset(12)
-                    make.leading.trailing.equalToSuperview().inset(16)
-                }
-                
-                dateLabel.snp.makeConstraints { make in
-                    make.top.equalTo(titleLabel.snp.bottom).offset(8)
-                    make.leading.equalToSuperview().offset(16)
-                }
-                
-                sizeLabel.snp.makeConstraints { make in
-                    make.top.equalTo(dateLabel.snp.bottom).offset(4)
-                    make.leading.equalToSuperview().offset(16)
-                    make.bottom.equalToSuperview().offset(-12)
-                }
-            }
-            
-            func configure(with video: VideoObject) {
-                titleLabel.text = video.title
-                
-                let formatter = DateFormatter()
-                formatter.dateStyle = .short
-                formatter.timeStyle = .short
-                dateLabel.text = formatter.string(from: video.downloadDate)
-                
-                let sizeInMB = Double(video.fileSize) / 1024.0 / 1024.0
-                sizeLabel.text = String(format: "%.2f MB", sizeInMB)
-            }
-        }
-        SWIFT_EOF
-    
-    - name: Create VideoPlayerViewController.swift
-      run: |
-        cat > VideoDownloaderPro/VideoDownloaderPro/Player/VideoPlayerViewController.swift << 'SWIFT_EOF'
-        import UIKit
-        import MobileVLCKit
-        import SnapKit
 
         class VideoPlayerViewController: UIViewController {
-            
-            private var mediaPlayer: VLCMediaPlayer!
-            private var videoView: UIView!
             var videoURL: URL!
+            private var playerLayer: AVPlayerLayer!
             
             override func viewDidLoad() {
                 super.viewDidLoad()
-                setupPlayer()
-            }
-            
-            private func setupPlayer() {
                 view.backgroundColor = .black
                 
-                videoView = UIView()
-                videoView.backgroundColor = .black
-                view.addSubview(videoView)
+                let player = AVPlayer(url: videoURL)
+                playerLayer = AVPlayerLayer(player: player)
+                playerLayer.frame = view.bounds
+                playerLayer.videoGravity = .resizeAspect
+                view.layer.addSublayer(playerLayer)
                 
-                videoView.snp.makeConstraints { make in
-                    make.edges.equalToSuperview()
-                }
-                
-                let closeButton = UIButton(type: .system)
-                closeButton.setImage(UIImage(systemName: "xmark"), for: .normal)
+                let closeButton = UIButton(frame: CGRect(x: 20, y: 50, width: 44, height: 44))
+                closeButton.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal)
                 closeButton.tintColor = .white
-                closeButton.backgroundColor = UIColor.black.withAlphaComponent(0.5)
-                closeButton.layer.cornerRadius = 20
                 closeButton.addTarget(self, action: #selector(close), for: .touchUpInside)
                 view.addSubview(closeButton)
                 
-                closeButton.snp.makeConstraints { make in
-                    make.top.equalTo(view.safeAreaLayoutGuide).offset(16)
-                    make.trailing.equalToSuperview().offset(-16)
-                    make.width.height.equalTo(40)
-                }
-                
-                mediaPlayer = VLCMediaPlayer()
-                mediaPlayer.drawable = videoView
-                mediaPlayer.media = VLCMedia(url: videoURL)
-                mediaPlayer.play()
+                player.play()
             }
             
-            @objc private func close() {
-                mediaPlayer.stop()
+            @objc func close() {
                 dismiss(animated: true)
             }
             
             override var prefersStatusBarHidden: Bool { true }
-            override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .all }
-        }
-        SWIFT_EOF
-    
-    - name: Create DownloadsViewController.swift
-      run: |
-        cat > VideoDownloaderPro/VideoDownloaderPro/Downloader/DownloadsViewController.swift << 'SWIFT_EOF'
-        import UIKit
-
-        class DownloadsViewController: UIViewController {
-            
-            private let label = UILabel()
-            
-            override func viewDidLoad() {
-                super.viewDidLoad()
-                title = "التحميلات"
-                view.backgroundColor = .systemBackground
-                
-                label.text = "لا توجد تحميلات جارية"
-                label.textAlignment = .center
-                label.textColor = .secondaryLabel
-                view.addSubview(label)
-                
-                label.snp.makeConstraints { make in
-                    make.center.equalToSuperview()
-                }
-            }
-        }
-        SWIFT_EOF
-    
-    - name: Create SettingsViewController.swift
-      run: |
-        cat > VideoDownloaderPro/VideoDownloaderPro/Settings/SettingsViewController.swift << 'SWIFT_EOF'
-        import UIKit
-        import RealmSwift
-        import SVProgressHUD
-
-        class SettingsViewController: UIViewController {
-            
-            private var tableView: UITableView!
-            
-            override func viewDidLoad() {
-                super.viewDidLoad()
-                title = "الإعدادات"
-                view.backgroundColor = .systemBackground
-                setupTableView()
-            }
-            
-            private func setupTableView() {
-                tableView = UITableView(frame: .zero, style: .insetGrouped)
-                tableView.delegate = self
-                tableView.dataSource = self
-                view.addSubview(tableView)
-                
-                tableView.snp.makeConstraints { make in
-                    make.edges.equalToSuperview()
-                }
-            }
         }
 
-        extension SettingsViewController: UITableViewDelegate, UITableViewDataSource {
-            func numberOfSections(in tableView: UITableView) -> Int { 2 }
-            
-            func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-                return section == 0 ? 2 : 1
-            }
-            
-            func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-                let cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
-                
-                if indexPath.section == 0 {
-                    if indexPath.row == 0 {
-                        cell.textLabel?.text = "حظر الإعلانات"
-                        let sw = UISwitch()
-                        sw.isOn = true
-                        cell.accessoryView = sw
-                    } else {
-                        cell.textLabel?.text = "مسح ذاكرة التخزين"
-                        cell.textLabel?.textColor = .systemRed
-                    }
-                } else {
-                    cell.textLabel?.text = "الإصدار"
-                    cell.detailTextLabel?.text = "1.0"
-                }
-                
-                return cell
-            }
-            
-            func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-                return section == 0 ? "الإعدادات" : "معلومات"
-            }
-            
-            func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-                tableView.deselectRow(at: indexPath, animated: true)
-                
-                if indexPath.section == 0 && indexPath.row == 1 {
-                    clearCache()
-                }
-            }
-            
-            private func clearCache() {
-                let realm = try! Realm()
-                let videos = realm.objects(VideoObject.self)
-                
-                try! realm.write {
-                    realm.delete(videos)
-                }
-                
-                SVProgressHUD.showSuccess(withStatus: "تم مسح الذاكرة")
-            }
+        import AVFoundation
+        import AVKit
+        EOF
+        
+        # Create Podfile (Simple version without dependencies)
+        cat > VideoDownloaderPro/Podfile << 'EOF'
+        platform :ios, '16.0'
+        use_frameworks!
+        
+        target 'VideoDownloaderPro' do
+        end
+        
+        post_install do |installer|
+          installer.pods_project.targets.each do |target|
+            target.build_configurations.each do |config|
+              config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
+              config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+            end
+          end
+        end
+        EOF
+        
+        # Create project.pbxproj (Minimal)
+        mkdir -p VideoDownloaderPro/VideoDownloaderPro.xcodeproj
+        cat > VideoDownloaderPro/VideoDownloaderPro.xcodeproj/project.pbxproj << 'EOF'
+        // !$*UTF8*$!
+        {
+        	archiveVersion = 1;
+        	classes = {};
+        	objectVersion = 56;
+        	objects = {
+        		A1 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+        		A2 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+        		A3 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VideoDownloaderPro.app; sourceTree = BUILT_PRODUCTS_DIR; };
+        		A4 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        		A5 = {isa = PBXGroup; children = (A1, A2); path = VideoDownloaderPro; sourceTree = "<group>"; };
+        		A6 = {isa = PBXNativeTarget; buildConfigurationList = A7; buildPhases = (A4, A8); buildRules = (); dependencies = (); name = VideoDownloaderPro; productName = VideoDownloaderPro; productReference = A3; productType = "com.apple.product-type.application"; };
+        		A7 = {isa = XCConfigurationList; buildConfigurations = (A9, A10); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+        		A8 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        		A9 = {isa = XCBuildConfiguration; buildSettings = {PRODUCT_NAME = VideoDownloaderPro; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2"; IPHONEOS_DEPLOYMENT_TARGET = 16.0; INFOPLIST_FILE = VideoDownloaderPro/Info.plist; PRODUCT_BUNDLE_IDENTIFIER = com.video.downloader.pro; CODE_SIGN_IDENTITY = ""; CODE_SIGNING_ALLOWED = NO; }; name = Debug; };
+        		A10 = {isa = XCBuildConfiguration; buildSettings = {PRODUCT_NAME = VideoDownloaderPro; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2"; IPHONEOS_DEPLOYMENT_TARGET = 16.0; INFOPLIST_FILE = VideoDownloaderPro/Info.plist; PRODUCT_BUNDLE_IDENTIFIER = com.video.downloader.pro; CODE_SIGN_IDENTITY = ""; CODE_SIGNING_ALLOWED = NO; }; name = Release; };
+        		A11 = {isa = PBXProject; attributes = {LastUpgradeCheck = 1500;}; buildConfigurationList = A12; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, ar); mainGroup = A5; productRefGroup = A5; projectDirPath = ""; projectRoot = ""; targets = (A6); };
+        		A12 = {isa = XCConfigurationList; buildConfigurations = (A9, A10); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+        	};
+        	rootObject = A11;
         }
-        SWIFT_EOF
+        EOF
     
-    - name: Install CocoaPods Dependencies
+    - name: Build
       run: |
         cd VideoDownloaderPro
-        pod install --repo-update
-    
-    - name: Build Project
-      run: |
-        cd VideoDownloaderPro
-        xcodebuild -workspace VideoDownloaderPro.xcworkspace \
+        
+        # Simple build without CocoaPods
+        xcodebuild -project VideoDownloaderPro.xcodeproj \
                    -scheme VideoDownloaderPro \
                    -configuration Release \
                    -sdk iphoneos \
-                   -derivedDataPath build \
+                   -destination 'generic/platform=iOS' \
                    CODE_SIGNING_ALLOWED=NO \
-                   CODE_SIGNING_REQUIRED=NO \
                    CODE_SIGN_IDENTITY="" \
-                   clean build
+                   ARCHS=arm64 \
+                   ONLY_ACTIVE_ARCH=NO \
+                   build
     
-    - name: Create IPA
+    - name: Package IPA
       run: |
         cd VideoDownloaderPro
         
-        # إنشاء مجلد Payload
-        mkdir -p Payload
+        # Find the app
+        APP_PATH=$(find . -name "*.app" | head -n 1)
+        echo "Found app at: $APP_PATH"
         
-        # نسخ التطبيق
-        cp -r build/Build/Products/Release-iphoneos/VideoDownloaderPro.app Payload/
+        # Create Payload
+        mkdir Payload
+        cp -r "$APP_PATH" Payload/
         
-        # التوقيع باستخدام ldid
-        find Payload/VideoDownloaderPro.app -type f -name "*.dylib" -exec ldid -S {} \;
-        ldid -S Payload/VideoDownloaderPro.app/VideoDownloaderPro
+        # Sign with ldid
+        ldid -S Payload/*.app
         
-        # إنشاء IPA
+        # Create IPA
         zip -r ../VideoDownloaderPro.ipa Payload
         
         cd ..
-        ls -lh VideoDownloaderPro.ipa
+        ls -lh *.ipa
     
-    - name: Upload IPA Artifact
+    - name: Upload IPA
       uses: actions/upload-artifact@v4
       with:
-        name: VideoDownloaderPro-TrollStore-v1.0
+        name: VideoDownloaderPro-IPA
         path: VideoDownloaderPro.ipa
-        retention-days: 30
     
     - name: Create Release
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      if: github.event_name == 'push'
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: v1.0-${{ github.run_number }}
-        name: Video Downloader Pro v1.0
-        body: |
-          ## 🎬 Video Downloader Pro
-          
-          ### ✨ المميزات:
-          - ✅ متصفح قوي مع دعم JavaScript كامل
-          - ✅ كشف تلقائي للفيديوهات (HTML5, M3U8, MP4)
-          - ✅ مانع إعلانات متقدم (6 طبقات حماية)
-          - ✅ تحميل الفيديوهات بجودة عالية
-          - ✅ مشغل فيديو VLC متقدم
-          - ✅ مكتبة لحفظ الفيديوهات
-          - ✅ دعم YouTube, Facebook, Instagram
-          - ✅ واجهة عربية كاملة
-          
-          ### 📱 التثبيت:
-          1. حمل ملف IPA
-          2. افتح TrollStore
-          3. اضغط على + ثم Install
-          4. اختر الملف وثبّت
-          
-          ### 🛡️ مانع الإعلانات:
-          - حظر Google Ads
-          - حظر Facebook Tracking
-          - حظر Pop-ups
-          - حظر Video Ads
-          - تنظيف صفحات الويب
-          
-          **متوافق مع iOS 16.0 - 16.4**
+        tag_name: v1.0.${{ github.run_number }}
         files: VideoDownloaderPro.ipa
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Summary
-      run: |
-        echo "✅ Build Completed Successfully!"
-        echo "📦 IPA Size: $(du -h VideoDownloaderPro.ipa | cut -f1)"
-        echo "🎯 Ready for TrollStore installation"
-        echo ""
-        echo "📋 Features:"
-        echo "  • Advanced Browser"
-        echo "  • 6-Layer AdBlocker"
-        echo "  • Auto Video Detection"
-        echo "  • VLC Player"
-        echo "  • Download Manager"
-        echo "  • Library System"
