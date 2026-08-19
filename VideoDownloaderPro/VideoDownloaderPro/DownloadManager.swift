@@ -53,13 +53,13 @@ final class DownloadManager: NSObject {
 
     // MARK: - Direct file download
 
-    func downloadFile(url: URL, title: String, referer: URL?,
+    func downloadFile(url: URL, title: String, referer: URL?, cookieHeader: String?,
                       completion: @escaping (Result<URL, Error>) -> Void) {
         var request = URLRequest(url: url)
         request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
-        if let referer = referer {
-            request.setValue(referer.absoluteString, forHTTPHeaderField: "Referer")
-        }
+        request.setValue("video/*,audio/*;q=0.9,*/*;q=0.5", forHTTPHeaderField: "Accept")
+        if let referer = referer { request.setValue(referer.absoluteString, forHTTPHeaderField: "Referer") }
+        if let cookieHeader = cookieHeader { request.setValue(cookieHeader, forHTTPHeaderField: "Cookie") }
 
         URLSession.shared.downloadTask(with: request) { [weak self] tempURL, response, error in
             guard let self = self else { return }
@@ -79,7 +79,7 @@ final class DownloadManager: NSObject {
             guard let tempURL = tempURL else { finish(.failure(DownloadError.missingFile)); return }
 
             do {
-                let ext = url.pathExtension.isEmpty ? "mp4" : url.pathExtension.lowercased()
+                let ext = self.fileExtension(for: http, fallbackURL: url)
                 let dest = self.downloadsDirectory.appendingPathComponent(self.uniqueFileName(base: title, ext: ext))
                 try FileManager.default.moveItem(at: tempURL, to: dest)
                 finish(.success(dest))
@@ -91,20 +91,18 @@ final class DownloadManager: NSObject {
 
     // MARK: - HLS download
 
-    func downloadHLS(url: URL, title: String, referer: URL?,
+    func downloadHLS(url: URL, title: String, referer: URL?, cookieHeader: String?,
                      completion: @escaping (Result<URL, Error>) -> Void) {
-        var options: [String: Any]?
         var headers = ["User-Agent": Self.userAgent]
-        if let referer = referer {
-            headers["Referer"] = referer.absoluteString
-        }
-        options = ["AVURLAssetHTTPHeaderFieldsKey": headers]
+        if let referer = referer { headers["Referer"] = referer.absoluteString }
+        if let cookieHeader = cookieHeader { headers["Cookie"] = cookieHeader }
 
-        let asset = AVURLAsset(url: url)
+        // Put headers on the asset itself; task options do not apply HTTP headers.
+        let asset = AVURLAsset(url: url, options: [AVURLAssetHTTPHeaderFieldsKey: headers])
         guard let task = hlsSession.makeAssetDownloadTask(asset: asset,
                                                           assetTitle: sanitized(title),
                                                           assetArtworkData: nil,
-                                                          options: options) else {
+                                                          options: nil) else {
             DispatchQueue.main.async { completion(.failure(DownloadError.taskCreationFailed)) }
             return
         }
@@ -125,6 +123,19 @@ final class DownloadManager: NSObject {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmed = String(cleaned.prefix(80))
         return trimmed.isEmpty ? "فيديو" : trimmed
+    }
+
+    private func fileExtension(for response: HTTPURLResponse, fallbackURL: URL) -> String {
+        // CDN links often have no useful path extension. Prefer the response MIME type.
+        let mime = response.mimeType?.lowercased() ?? ""
+        let mimeExtensions = [
+            "video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm",
+            "video/x-m4v": "m4v", "video/x-msvideo": "avi", "video/3gpp": "3gp",
+            "audio/mpeg": "mp3", "audio/mp4": "m4a"
+        ]
+        if let ext = mimeExtensions[mime] { return ext }
+        let pathExt = fallbackURL.pathExtension.lowercased()
+        return pathExt.isEmpty ? "mp4" : pathExt
     }
 
     private func uniqueFileName(base: String, ext: String) -> String {

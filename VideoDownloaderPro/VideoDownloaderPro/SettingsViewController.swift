@@ -34,13 +34,15 @@ final class SettingsViewController: UIViewController {
         let message = """
         الإصدار: \(version)
 
-        متصفح مع مانع إعلانات واكتشاف وتحميل فيديوهات.
+        متصفح مع اكتشاف وتحميل وسائط عامة.
 
         التحميل المدعوم:
-        • ملفات مباشرة (MP4 / MOV / M4V)
-        • بث HLS (m3u8) — يُحفظ كفيديو كامل قابل للتشغيل
+        • روابط فيديو وصوت مباشرة، حتى لو كان الرابط بلا امتداد واضح
+        • MP4 / MOV / M4V / WEBM / AVI / 3GP والصيغ التي يعلنها الخادم
+        • HLS (m3u8) — يُحفظ كفيديو كامل قابل للتشغيل
+        • جلسة تسجيل الدخول للموقع نفسه عند الحاجة
 
-        غير مدعوم: DASH والمواقع المحمية بتوقيعات خاصة.
+        غير مدعوم: DASH وDRM والمحتوى المحمي أو الذي يمنع التنزيل. حمّل فقط ما تملك حق حفظه.
         """
         let alert = UIAlertController(title: "Video Pro", message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "حسناً", style: .default))

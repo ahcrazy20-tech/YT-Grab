@@ -237,20 +237,35 @@ final class BrowserViewController: UIViewController {
             showAlert("خطأ", message: "رابط الفيديو غير صالح")
             return
         }
+        guard video.kind != .dash else {
+            showAlert("غير مدعوم", message: "DASH غير مدعوم على iOS، ولا يمكن تنزيل البث المحمي أو DRM.")
+            return
+        }
 
-        switch video.kind {
-        case .dash:
-            showAlert("غير مدعوم", message: "صيغة البث DASH غير مدعومة حالياً.")
-        case .hls:
-            showAlert("بدأ التحميل", message: video.title)
-            DownloadManager.shared.downloadHLS(url: url, title: video.title, referer: webView.url) { [weak self] result in
-                self?.handleDownloadResult(result, title: video.title)
+        // Keep the authenticated session for sites where the user is signed in.
+        // Only cookies belonging to the media host are forwarded.
+        webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
+            let host = url.host?.lowercased() ?? ""
+            let matching = cookies.filter {
+                let domain = $0.domain.trimmingCharacters(in: CharacterSet(charactersIn: ".")).lowercased()
+                return host == domain || host.hasSuffix("." + domain)
             }
-        case .file:
-            showAlert("بدأ التحميل", message: video.title)
-            DownloadManager.shared.downloadFile(url: url, title: video.title, referer: webView.url) { [weak self] result in
-                self?.handleDownloadResult(result, title: video.title)
+            let cookieHeader = HTTPCookie.requestHeaderFields(with: matching)["Cookie"]
+            DispatchQueue.main.async {
+                self?.beginDownload(video, url: url, cookieHeader: cookieHeader)
             }
+        }
+    }
+
+    private func beginDownload(_ video: VideoInfo, url: URL, cookieHeader: String?) {
+        showAlert("بدأ التحميل", message: video.title)
+        let completion: (Result<URL, Error>) -> Void = { [weak self] result in
+            self?.handleDownloadResult(result, title: video.title)
+        }
+        if video.kind == .hls {
+            DownloadManager.shared.downloadHLS(url: url, title: video.title, referer: webView.url, cookieHeader: cookieHeader, completion: completion)
+        } else {
+            DownloadManager.shared.downloadFile(url: url, title: video.title, referer: webView.url, cookieHeader: cookieHeader, completion: completion)
         }
     }
 
